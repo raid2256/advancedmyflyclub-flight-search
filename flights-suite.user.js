@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Google Flights Suite (Max Realism Edition)
+// @name         MyFlyClub Google Flights Suite (Advanced Layout)
 // @namespace    https://github.com/raid2256
-// @version      1.6
-// @description  Advanced ultimate flight search suite with interactive expandable cards, deep amenities, carbon metrics, layover diagnostics, and cabin multipliers.
+// @version      1.7
+// @description  Advanced flight search engine with dynamic Multi-City leg additions, structural layout fixes, and complete metrics dropdowns.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -10,12 +10,10 @@
 (function() {
     'use strict';
 
-    // Prevent duplicates
     if (document.getElementById('g-flights-suite')) {
         document.getElementById('g-flights-suite').remove();
     }
 
-    // 1. Inject Styles Matrix
     const style = document.createElement('style');
     style.id = 'g-flights-styles';
     style.innerHTML = `
@@ -26,20 +24,30 @@
             z-index: 999999; font-family: system-ui, -apple-system, sans-serif;
             display: flex; flex-direction: column; overflow: hidden;
         }
-        .gf-header { background: #1e1e24; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #27272a; }
+        .gf-header { background: #1e1e24; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #27272a; flex-shrink: 0; }
         .gf-title { font-weight: 700; color: #60a5fa; font-size: 15px; display: flex; align-items: center; gap: 6px; }
         .gf-close { background: none; border: none; color: #a1a1aa; cursor: pointer; font-size: 16px; font-weight: bold; }
         .gf-close:hover { color: #f4f4f5; }
-        .gf-controls { padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #18181b; border-bottom: 1px solid #27272a; }
-        .gf-row { display: flex; gap: 8px; align-items: center; }
-        .gf-input { flex: 1; padding: 8px 10px; background: #27272a; border: 1px solid #3f3f46; color: #ffffff; border-radius: 8px; font-size: 13px; outline: none; }
+        
+        /* Layout fix: Increased padding/gap spacing matrix to prevent item collisions */
+        .gf-controls { padding: 16px; display: flex; flex-direction: column; gap: 14px; background: #18181b; border-bottom: 1px solid #27272a; flex-shrink: 0; }
+        .gf-row { display: flex; gap: 10px; align-items: flex-end; width: 100%; }
+        .gf-input-group { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+        .gf-input { width: 100%; padding: 10px; background: #27272a; border: 1px solid #3f3f46; color: #ffffff; border-radius: 8px; font-size: 13px; outline: none; box-sizing: border-box; height: 38px; line-height: 1.2; }
         .gf-input:focus { border-color: #3b82f6; }
-        .gf-label { font-size: 11px; color: #a1a1aa; font-weight: 600; margin-bottom: -4px; margin-left: 2px; }
-        .gf-btn { background: #2563eb; color: #ffffff; border: none; padding: 8px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; transition: background 0.2s; height: 36px; }
+        .gf-label { font-size: 12px; color: #a1a1aa; font-weight: 600; display: block; }
+        
+        /* Multi-City dynamic segments box */
+        .gf-legs-builder { display: flex; flex-direction: column; gap: 8px; max-height: 140px; overflow-y: auto; padding-right: 4px; }
+        .gf-leg-builder-row { display: flex; gap: 8px; align-items: center; background: #202024; padding: 6px; border-radius: 8px; border: 1px solid #27272a; }
+        .gf-add-leg-btn { background: none; border: 1px dashed #3f3f46; color: #60a5fa; padding: 6px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; text-align: center; width: 100%; transition: background 0.2s; }
+        .gf-add-leg-btn:hover { background: rgba(59, 130, 246, 0.1); border-color: #3b82f6; }
+        .gf-remove-leg-btn { background: none; border: none; color: #f87171; cursor: pointer; font-size: 14px; padding: 0 6px; font-weight: bold; }
+
+        .gf-btn { background: #2563eb; color: #ffffff; border: none; padding: 0 16px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; transition: background 0.2s; height: 38px; display: inline-flex; align-items: center; justify-content: center; }
         .gf-btn:hover { background: #1d4ed8; }
         .gf-results { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: #09090b; }
         
-        /* Expandable Card Layout UI */
         .gf-card { background: #1e1e24; border: 1px solid #27272a; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; transition: background 0.2s; }
         .gf-card:hover { background: #24242b; border-color: #3f3f46; }
         .gf-summary { display: flex; justify-content: space-between; align-items: center; }
@@ -51,7 +59,6 @@
         .gf-leg-title { font-size: 13px; font-weight: 600; color: #f4f4f5; display: flex; justify-content: space-between; }
         .gf-leg-sub { font-size: 11px; color: #71717a; display: flex; justify-content: space-between; align-items: center; }
         
-        /* Hidden Expandable Details Drawer */
         .gf-details { display: none; background: #141416; padding: 12px; border-radius: 8px; font-size: 12px; color: #d4d4d8; border: 1px solid #27272a; flex-direction: column; gap: 8px; margin-top: 4px; cursor: default; }
         .gf-details.active { display: flex; }
         .gf-detail-section { display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid #27272a; padding-bottom: 8px; margin-bottom: 4px; }
@@ -89,29 +96,35 @@
 
     const todayStr = new Date().toISOString().split('T')[0];
 
-    // 2. Generate Application Overlay DOM Structure
     const appContainer = document.createElement('div');
     appContainer.id = 'g-flights-suite';
     appContainer.innerHTML = `
         <div class="gf-header">
-            <span class="gf-title">✈️ Google Flights Suite (Max Realism)</span>
+            <span class="gf-title">✈️ Advanced Flight Search</span>
             <button id="gf-close-window" class="gf-close">✕</button>
         </div>
         <div class="gf-controls">
-            <div class="gf-row">
-                <div style="flex: 2; display: flex; flex-direction: column;">
-                    <span class="gf-label">Route Nodes</span>
-                    <input type="text" id="gf-route-input" class="gf-input" placeholder="Codes / IDs (e.g. SYD, LAX, JFK)">
+            <div id="gf-legs-builder-box" class="gf-legs-builder">
+                <div class="gf-leg-builder-row" data-leg-index="0">
+                    <div class="gf-input-group">
+                        <span class="gf-label">From</span>
+                        <input type="text" class="gf-input gf-loc-from" placeholder="e.g. DXB" value="DXB">
+                    </div>
+                    <div class="gf-input-group">
+                        <span class="gf-label">To</span>
+                        <input type="text" class="gf-input gf-loc-to" placeholder="e.g. SYD" value="SYD">
+                    </div>
+                    <span style="width:20px;"></span>
                 </div>
-                <div style="flex: 1; display: flex; flex-direction: column;">
+            </div>
+            <button id="gf-add-leg-trigger" class="gf-add-leg-btn">+ Add flight leg</button>
+
+            <div class="gf-row">
+                <div class="gf-input-group" style="flex: 1.5;">
                     <span class="gf-label">Departure Date</span>
                     <input type="date" id="gf-date-input" class="gf-input" value="${todayStr}">
                 </div>
-                <button id="gf-submit-search" class="gf-btn" style="margin-top: 12px;">Search</button>
-            </div>
-            
-            <div class="gf-row">
-                <div style="flex: 1; display: flex; flex-direction: column;">
+                <div class="gf-input-group">
                     <span class="gf-label">Class</span>
                     <select id="gf-filter-class" class="gf-input">
                         <option value="economy">Economy</option>
@@ -119,17 +132,19 @@
                         <option value="first">First Class</option>
                     </select>
                 </div>
-                <div style="flex: 1; display: flex; flex-direction: column;">
+                <button id="gf-submit-search" class="gf-btn">Search</button>
+            </div>
+            
+            <div class="gf-row">
+                <div class="gf-input-group">
                     <span class="gf-label">Passengers</span>
                     <select id="gf-filter-passengers" class="gf-input">
                         <option value="1">1 adult</option>
                         <option value="2">2 adults</option>
                         <option value="3">3 adults</option>
-                        <option value="4">4 adults</option>
-                        <option value="5">5 adults</option>
                     </select>
                 </div>
-                <div style="flex: 1; display: flex; flex-direction: column;">
+                <div class="gf-input-group">
                     <span class="gf-label">Max Connections</span>
                     <select id="gf-filter-stops" class="gf-input">
                         <option value="all">Any stops</option>
@@ -154,7 +169,36 @@
     `;
     document.body.appendChild(appContainer);
 
-    // 3. Main Data Filter Rendering Processing Module
+    // Dynamic Multi-City Leg Adder Controls Layer
+    document.getElementById('gf-add-leg-trigger').addEventListener('click', () => {
+        const builderBox = document.getElementById('gf-legs-builder-box');
+        const currentCount = builderBox.children.length;
+        
+        // Get target default based on last row destination to smooth input chain flow
+        const previousToVal = builderBox.lastElementChild.querySelector('.gf-loc-to').value.toUpperCase();
+
+        const newRow = document.createElement('div');
+        newRow.className = 'gf-leg-builder-row';
+        newRow.setAttribute('data-leg-index', currentCount);
+        newRow.innerHTML = `
+            <div class="gf-input-group">
+                <span class="gf-label">From</span>
+                <input type="text" class="gf-input gf-loc-from" placeholder="e.g. LAX" value="${previousToVal}">
+            </div>
+            <div class="gf-input-group">
+                <span class="gf-label">To</span>
+                <input type="text" class="gf-input gf-loc-to" placeholder="e.g. JFK">
+            </div>
+            <button class="gf-remove-leg-btn">✕</button>
+        `;
+
+        newRow.querySelector('.gf-remove-leg-btn').addEventListener('click', () => {
+            newRow.remove();
+        });
+
+        builderBox.appendChild(newRow);
+    });
+
     function processAndRenderFilters() {
         const resultsBox = document.getElementById('gf-results-box');
         const airlineQuery = document.getElementById('gf-filter-airline').value.toLowerCase();
@@ -179,7 +223,6 @@
             const adjustedCost = Math.round(itinerary.totalCost * classMultiplier * passengerCount);
             if (adjustedCost > maxPrice) return false;
 
-            // Handle Overnight Filtering logic check
             if (maxStops === 'overnight') {
                 const hasOvernightSegment = itinerary.legs.some(leg => 
                     leg.some((flight, idx) => idx > 0 && (flight.departure - leg[idx-1].arrival) > 480)
@@ -209,9 +252,7 @@
             const card = document.createElement('div');
             card.className = 'gf-card';
             
-            // Interactive Drawer Expansion Click Handler
             card.addEventListener('click', (e) => {
-                // Ignore click if clicking internal details box text directly
                 if (e.target.closest('.gf-details')) return;
                 const detailsDrawer = card.querySelector('.gf-details');
                 if (detailsDrawer) detailsDrawer.classList.toggle('active');
@@ -243,7 +284,6 @@
                     const qTier = getQualityTier(flight.computedQuality || 50);
                     const rawFeatures = flight.features || [];
                     
-                    // Populate explicit G-Flights specification indicators
                     const amenitiesList = [
                         { label: "Cabin Class", val: classLabelText },
                         { label: "Legroom", val: cabinClass === 'economy' ? (flight.computedQuality > 70 ? 'Above-average legroom (81 cm)' : 'Standard legroom (78 cm)') : cabinClass === 'business' ? 'Plush deep space (96 cm)' : 'Full Lie-flat Private Suite' },
@@ -300,7 +340,6 @@
         });
     }
 
-    // 4. Mathematical Permutations Array Combinator Framework
     function generatePermutations(legsArray) {
         if (legsArray.length === 0) return [];
         if (legsArray.length === 1) {
@@ -326,56 +365,51 @@
         return combined;
     }
 
-    // 5. Async Multi-Fetch Endpoint Engine
     async function executeFlightSearch() {
-        const inputString = document.getElementById('gf-route-input').value.trim();
         const resultsBox = document.getElementById('gf-results-box');
-
-        if (!inputString) {
-            resultsBox.innerHTML = `<div style="color: #f59e0b; text-align: center; margin-top: 50px;">Please specify Airport codes or IDs.</div>`;
-            return;
-        }
-
-        const inputs = inputString.split(',').map(item => item.trim().toUpperCase()).filter(item => item.length > 0);
-        if (inputs.length < 2) {
-            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">Minimum 2 airport steps required.</div>`;
-            return;
-        }
-
-        const airportIds = [];
-        let lookupError = false;
-
-        for (const input of inputs) {
-            if (!isNaN(input)) {
-                airportIds.push(input);
-            } else {
-                let foundId = null;
-                if (typeof airports !== 'undefined' && airports.features) {
-                    const match = airports.features.find(f => f.properties && f.properties.iata === input);
-                    if (match) foundId = match.properties.id;
-                }
-                if (foundId) {
-                    airportIds.push(foundId);
-                } else {
-                    resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">Could not map code "${input}" to an internal game ID.</div>`;
-                    lookupError = true;
-                    break;
-                }
+        const builderBox = document.getElementById('gf-legs-builder-box');
+        
+        // Dynamic node mapping array loop processing across builder layout items
+        const rawNodes = [];
+        Array.from(builderBox.children).forEach(row => {
+            const fromCode = row.querySelector('.gf-loc-from').value.trim().toUpperCase();
+            const toCode = row.querySelector('.gf-loc-to').value.trim().toUpperCase();
+            if (fromCode && toCode) {
+                rawNodes.push({ from: fromCode, to: toCode });
             }
+        });
+
+        if (rawNodes.length === 0) {
+            resultsBox.innerHTML = `<div style="color: #f59e0b; text-align: center; margin-top: 50px;">Please specify structural destination pairs.</div>`;
+            return;
         }
 
-        if (lookupError) return;
-
-        resultsBox.innerHTML = `<div style="color: #60a5fa; text-align: center; margin-top: 100px;">Querying simulated routing layers...</div>`;
+        resultsBox.innerHTML = `<div style="color: #60a5fa; text-align: center; margin-top: 100px;">Mapping structural layout arrays...</div>`;
         compiledItineraries = [];
 
         try {
             const fetchPromises = [];
-            for (let i = 0; i < airportIds.length - 1; i++) {
-                const fromNode = airportIds[i];
-                const toNode = airportIds[i+1];
-                fetchPromises.push(fetch(`/search-route/${fromNode}/${toNode}`).then(res => {
-                    if (!res.ok) throw new Error(`Network failure tracking segment ${fromNode}->${toNode}`);
+            
+            for (const leg of rawNodes) {
+                let fromId = leg.from;
+                let toId = leg.to;
+
+                // Handle global airport object parsing lookups for string codes
+                if (isNaN(fromId) && typeof airports !== 'undefined' && airports.features) {
+                    const match = airports.features.find(f => f.properties && f.properties.iata === fromId);
+                    if (match) fromId = match.properties.id;
+                }
+                if (isNaN(toId) && typeof airports !== 'undefined' && airports.features) {
+                    const match = airports.features.find(f => f.properties && f.properties.iata === toId);
+                    if (match) toId = match.properties.id;
+                }
+
+                if (isNaN(fromId) || isNaN(toId)) {
+                    throw new Error(`Failed code translation mapping for parameters.`);
+                }
+
+                fetchPromises.push(fetch(`/search-route/${fromId}/${toId}`).then(res => {
+                    if (!res.ok) throw new Error(`Segment mapping failed`);
                     return res.json();
                 }));
             }
@@ -386,12 +420,11 @@
             processAndRenderFilters();
 
         } catch (error) {
-            console.error("G-Flights add-on crash logged:", error);
-            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">Error calculating interconnected connections.</div>`;
+            console.error("Advanced search thread exception handled:", error);
+            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">Error calculating interconnected routing pairs. Check airport codes.</div>`;
         }
     }
 
-    // 6. Connect Layout Interface Element Trigger Events
     document.getElementById('gf-submit-search').addEventListener('click', executeFlightSearch);
     document.getElementById('gf-filter-airline').addEventListener('input', processAndRenderFilters);
     document.getElementById('gf-filter-stops').addEventListener('change', processAndRenderFilters);
