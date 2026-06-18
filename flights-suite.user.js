@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Google Flights Suite
-// @namespace    https://github.com/
-// @version      1.2
-// @description  Advanced flight search tool with Multi-City IATA lookups and real-time matrix filters.
+// @name         MyFlyClub Google Flights Suite (Enhanced)
+// @namespace    https://github.com/raid2256
+// @version      1.3
+// @description  Advanced flight search with Quality Ratings, Aircraft Models, and dynamic Layover tracking.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -18,7 +18,7 @@
     style.id = 'g-flights-styles';
     style.innerHTML = `
         #g-flights-suite {
-            position: fixed; top: 15px; right: 15px; width: 500px; height: 700px;
+            position: fixed; top: 15px; right: 15px; width: 520px; height: 750px;
             background: #121214; color: #e4e4e7; border: 1px solid #27272a;
             border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.7);
             z-index: 999999; font-family: system-ui, -apple-system, sans-serif;
@@ -35,19 +35,40 @@
         .gf-btn { background: #2563eb; color: #ffffff; border: none; padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; transition: background 0.2s; }
         .gf-btn:hover { background: #1d4ed8; }
         .gf-results { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: #09090b; }
-        .gf-card { background: #1e1e24; border: 1px solid #27272a; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; transition: transform 0.15s; }
-        .gf-card:hover { transform: translateY(-2px); border-color: #3f3f46; }
+        .gf-card { background: #1e1e24; border: 1px solid #27272a; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
         .gf-summary { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #27272a; padding-bottom: 8px; }
         .gf-price { font-size: 18px; font-weight: 700; color: #4ade80; }
         .gf-stops { font-size: 12px; color: #a1a1aa; background: #27272a; padding: 2px 8px; border-radius: 20px; }
-        .gf-leg { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; background: #141416; border-radius: 6px; border-left: 3px solid #3b82f6; }
+        .gf-leg { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: #141416; border-radius: 6px; border-left: 3px solid #3b82f6; }
         .gf-leg-title { font-size: 13px; font-weight: 600; color: #f4f4f5; display: flex; justify-content: space-between; }
-        .gf-leg-sub { font-size: 11px; color: #71717a; display: flex; justify-content: space-between; }
-        .gf-badge { background: #065f46; color: #34d399; font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: bold; text-transform: uppercase; }
+        .gf-leg-sub { font-size: 11px; color: #71717a; display: flex; justify-content: space-between; align-items: center; }
+        .gf-badge { background: #065f46; color: #34d399; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; text-transform: uppercase; }
+        .gf-layover { font-size: 11px; color: #fb923c; background: rgba(251, 146, 60, 0.1); border: 1px dashed rgba(251, 146, 60, 0.3); text-align: center; padding: 4px; border-radius: 6px; margin: 2px 0; font-weight: 500; }
+        .q-excellent { color: #4ade80; }
+        .q-good { color: #a3e635; }
+        .q-average { color: #facc15; }
+        .q-poor { color: #fb923c; }
+        .q-terrible { color: #f87171; }
     `;
     document.head.appendChild(style);
 
     let compiledItineraries = [];
+
+    // Helper to format simulation minutes into clean layout reading text
+    function formatDuration(minutes) {
+        const h = Math.floor(minutes / 60);
+        const m = minutes % 60;
+        return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    }
+
+    // Helper to map 0-100 score into standard MFC verbal quality tiers
+    function getQualityTier(score) {
+        if (score >= 80) return { text: `Excellent (${score/10}/10)`, class: 'q-excellent' };
+        if (score >= 60) return { text: `Good (${score/10}/10)`, class: 'q-good' };
+        if (score >= 50) return { text: `Average (${score/10}/10)`, class: 'q-average' };
+        if (score >= 40) return { text: `Poor (${score/10}/10)`, class: 'q-poor' };
+        return { text: `Terrible (${score/10}/10)`, class: 'q-terrible' };
+    }
 
     const appContainer = document.createElement('div');
     appContainer.id = 'g-flights-suite';
@@ -120,12 +141,22 @@
 
             itinerary.legs.forEach((legFlights, index) => {
                 totalStopsCount += (legFlights.length - 1);
-                legsHtml += `<div style="font-size: 11px; text-transform: uppercase; color: #3b82f6; font-weight: bold; margin-top: 4px;">Leg ${index + 1}</div>`;
+                legsHtml += `<div style="font-size: 11px; text-transform: uppercase; color: #3b82f6; font-weight: bold; margin-top: 6px;">Leg ${index + 1}</div>`;
                 
-                legFlights.forEach(flight => {
+                legFlights.forEach((flight, fIndex) => {
+                    // Check layover mechanics relative to previous sequence entries
+                    if (fIndex > 0) {
+                        const prevFlight = legFlights[fIndex - 1];
+                        const layoverTime = flight.departure - prevFlight.arrival;
+                        const isOvernight = layoverTime > 480 ? ' (Overnight Layover)' : '';
+                        legsHtml += `<div class="gf-layover">⏱️ Layover: ${formatDuration(layoverTime)}${isOvernight} at ${flight.fromAirportIata}</div>`;
+                    }
+
                     let badgeHtml = '';
                     if (flight.remarks && flight.remarks.includes('BEST_SELLER')) badgeHtml = `<span class="gf-badge">Best Seller</span>`;
                     if (flight.remarks && flight.remarks.includes('BEST_DEAL')) badgeHtml = `<span class="gf-badge" style="background:#1e3a8a; color:#93c5fd;">Best Deal</span>`;
+
+                    const qTier = getQualityTier(flight.computedQuality || 50);
 
                     legsHtml += `
                         <div class="gf-leg">
@@ -134,8 +165,8 @@
                                 <span>$${flight.price || 0} ${badgeHtml}</span>
                             </div>
                             <div class="gf-leg-sub">
-                                <span>${flight.airlineName}</span>
-                                <span>${flight.airplaneModelName || 'Commercial Jet'}</span>
+                                <span>${flight.airlineName} • <i style="color: #a1a1aa;">${flight.airplaneModelName || 'Commercial Jet'}</i></span>
+                                <span class="${qTier.class}" style="font-weight: 600;">${qTier.text}</span>
                             </div>
                         </div>
                     `;
@@ -147,108 +178,4 @@
                     <span class="gf-price">$${itinerary.totalCost}</span>
                     <span class="gf-stops">${totalStopsCount === 0 ? 'Nonstop Total' : totalStopsCount + ' Total Layovers'}</span>
                 </div>
-                <div style="display: flex; flex-direction: column; gap: 6px;">${legsHtml}</div>
-            `;
-            resultsBox.appendChild(card);
-        });
-    }
-
-    function generatePermutations(legsArray) {
-        if (legsArray.length === 0) return [];
-        if (legsArray.length === 1) {
-            return legsArray[0].map(itineraryObj => ({
-                legs: [itineraryObj.route.filter(l => l.transportType === 'FLIGHT')],
-                totalCost: itineraryObj.route.reduce((acc, f) => acc + (f.price || 0), 0)
-            }));
-        }
-        const subPermutations = generatePermutations(legsArray.slice(1));
-        const currentLegOptions = legsArray[0];
-        const combined = [];
-
-        currentLegOptions.forEach(currentItinerary => {
-            const currentFlights = currentItinerary.route.filter(l => l.transportType === 'FLIGHT');
-            const currentCost = currentItinerary.route.reduce((acc, f) => acc + (f.price || 0), 0);
-            subPermutations.forEach(subItinerary => {
-                combined.push({
-                    legs: [currentFlights, ...subItinerary.legs],
-                    totalCost: currentCost + subItinerary.totalCost
-                });
-            });
-        });
-        return combined;
-    }
-
-    async function executeFlightSearch() {
-        const inputString = document.getElementById('gf-route-input').value.trim();
-        const resultsBox = document.getElementById('gf-results-box');
-
-        if (!inputString) {
-            resultsBox.innerHTML = `<div style="color: #f59e0b; text-align: center; margin-top: 50px;">Please specify Airport codes or IDs.</div>`;
-            return;
-        }
-
-        const inputs = inputString.split(',').map(item => item.trim().toUpperCase()).filter(item => item.length > 0);
-        if (inputs.length < 2) {
-            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">Minimum 2 airport steps required.</div>`;
-            return;
-        }
-
-        const airportIds = [];
-        let lookupError = false;
-
-        for (const input of inputs) {
-            if (!isNaN(input)) {
-                airportIds.push(input);
-            } else {
-                let foundId = null;
-                if (typeof airports !== 'undefined' && airports.features) {
-                    const match = airports.features.find(f => f.properties && f.properties.iata === input);
-                    if (match) foundId = match.properties.id;
-                }
-                if (foundId) {
-                    airportIds.push(foundId);
-                } else {
-                    resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">Could not map code "${input}" to an internal game ID.</div>`;
-                    lookupError = true;
-                    break;
-                }
-            }
-        }
-
-        if (lookupError) return;
-
-        resultsBox.innerHTML = `<div style="color: #60a5fa; text-align: center; margin-top: 100px;">Querying simulated routing layers...</div>`;
-        compiledItineraries = [];
-
-        try {
-            const fetchPromises = [];
-            for (let i = 0; i < airportIds.length - 1; i++) {
-                const fromNode = airportIds[i];
-                const toNode = airportIds[i+1];
-                fetchPromises.push(fetch(`/search-route/${fromNode}/${toNode}`).then(res => {
-                    if (!res.ok) throw new Error(`Network failure tracking segment ${fromNode}->${toNode}`);
-                    return res.json();
-                }));
-            }
-
-            const segmentsData = await Promise.all(fetchPromises);
-            compiledItineraries = generatePermutations(segmentsData);
-            compiledItineraries.sort((a, b) => a.totalCost - b.totalCost);
-            processAndRenderFilters();
-
-        } catch (error) {
-            console.error("G-Flights add-on crash logged:", error);
-            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">Error calculating interconnected connections.</div>`;
-        }
-    }
-
-    document.getElementById('gf-submit-search').addEventListener('click', executeFlightSearch);
-    document.getElementById('gf-filter-airline').addEventListener('input', processAndRenderFilters);
-    document.getElementById('gf-filter-stops').addEventListener('change', processAndRenderFilters);
-    document.getElementById('gf-filter-price').addEventListener('input', processAndRenderFilters);
-
-    document.getElementById('gf-close-window').addEventListener('click', () => {
-        appContainer.remove();
-        style.remove();
-    });
-})();
+                <div style="display: flex; flex-direction: column; gap: 6px
