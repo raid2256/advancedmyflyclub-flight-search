@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search
+// @name         MyFlyClub Advanced Flight Search (Ultimate Three-Section Edition)
 // @namespace    https://github.com/raid2256
-// @version      3.0
-// @description  Google Flights clone for MyFlyClub with tab splitting matrices, baggage weight surcharge calculators, connection warning trackers, and responsive mobile viewport layouts.
+// @version      3.1
+// @description  Google Flights style suite with dynamic split-ticket calculations, self-transfer warnings, bag fee calculations, three-tab panels, and fluid mobile viewports.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -15,7 +15,7 @@
 
     const todayStr = new Date().toISOString().split('T')[0];
     let compiledItineraries = [];
-    let activeResultTab = 'best'; // Grid category state toggles: 'best' or 'other'
+    let activeResultTab = 'best'; // Core panel states: 'best', 'cheapest', or 'other'
 
     const style = document.createElement('style');
     style.id = 'g-flights-styles';
@@ -70,12 +70,11 @@
         .gf-list-item { font-size: 12px; padding: 6px 4px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; }
         .gf-list-item:last-child { border-bottom: none; }
         
-        /* Layout Results Matrix Panels */
         .gf-right-container { flex: 1; display: flex; flex-direction: column; min-height: 0; }
         
-        /* Google Flights Segment tab selector layout anchors */
+        /* Three Generic Google Flights Style Selector Tabs */
         .gf-matrix-tabs { display: flex; width: 100%; border-bottom: 1px solid #27272a; background: #18181b; flex-shrink: 0; }
-        .gf-tab-item { flex: 1; text-align: center; padding: 12px; font-size: 13px; font-weight: 600; color: #a1a1aa; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+        .gf-tab-item { flex: 1; text-align: center; padding: 14px 6px; font-size: 13px; font-weight: 600; color: #a1a1aa; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; user-select: none; }
         .gf-tab-item:hover { color: #f4f4f5; background: #1e1e24; }
         .gf-tab-item.active { color: #60a5fa; border-bottom-color: #3b82f6; background: #141416; }
 
@@ -84,11 +83,12 @@
         .gf-card { background: #1e1e24; border: 1px solid #27272a; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; transition: background 0.2s; }
         .gf-card:hover { background: #24242b; border-color: #3f3f46; }
         .gf-summary { display: flex; justify-content: space-between; align-items: center; }
-        .gf-price { font-size: 18px; font-weight: 700; }
+        .gf-price { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
         .gf-stops { font-size: 12px; color: #a1a1aa; background: #27272a; padding: 2px 8px; border-radius: 20px; }
         
         .gf-legs-container { display: flex; flex-direction: column; gap: 6px; }
         .gf-leg { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: #141416; border-radius: 6px; border-left: 3px solid #3b82f6; }
+        .gf-leg.split-ticket-segment { border-left-color: #a855f7; }
         .gf-leg-title { font-size: 13px; font-weight: 600; color: #f4f4f5; display: flex; justify-content: space-between; }
         .gf-leg-sub { font-size: 11px; color: #71717a; display: flex; justify-content: space-between; align-items: center; }
         
@@ -101,9 +101,12 @@
         .gf-detail-val { font-weight: 500; color: #f4f4f5; }
         
         .gf-badge { background: #065f46; color: #34d399; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; text-transform: uppercase; }
-        .gf-badge-guarantee { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 6px; }
+        .gf-badge-guarantee { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+        .gf-badge-selftransfer { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+        
         .gf-layover { font-size: 11px; color: #fb923c; background: rgba(251, 146, 60, 0.1); border: 1px dashed rgba(251, 146, 60, 0.3); text-align: center; padding: 6px; border-radius: 6px; margin: 2px 0; font-weight: 600; }
         .gf-layover.tight-warning { color: #f87171; background: rgba(248, 113, 113, 0.1); border-color: rgba(248, 113, 113, 0.4); }
+        .gf-layover.selftransfer-warning { color: #c084fc; background: rgba(168, 85, 247, 0.1); border-color: rgba(168, 85, 247, 0.3); }
         
         .p-low { color: #4ade80; }
         .p-mid { color: #facc15; }
@@ -220,11 +223,11 @@
 
             <div class="gf-row">
                 <div class="gf-input-group">
-                    <span class="gf-label">Airline Name Filter</span>
+                    <span class="gf-label">Airline Filter</span>
                     <input type="text" id="gf-filter-airline" class="gf-input" placeholder="Filter Airline Name...">
                 </div>
-                <div class="gf-input-group" style="flex: 0.6;">
-                    <span class="gf-label">Connections</span>
+                <div class="gf-input-group" style="flex: 0.7;">
+                    <span class="gf-label">Stops Max</span>
                     <select id="gf-filter-stops" class="gf-input">
                         <option value="all">Any stops</option>
                         <option value="0">Nonstop Only</option>
@@ -232,16 +235,16 @@
                         <option value="overnight">Overnight Tracks</option>
                     </select>
                 </div>
-                <div class="gf-input-group" style="flex: 0.6;">
-                    <span class="gf-label">Sort Order Matrix</span>
+                <div class="gf-input-group" style="flex: 0.7;">
+                    <span class="gf-label">Sort By</span>
                     <select id="gf-matrix-sort" class="gf-input">
                         <option value="price">Cheapest first</option>
                         <option value="rating">Best ratings</option>
                         <option value="stops">Fewest connections</option>
                     </select>
                 </div>
-                <div class="gf-input-group" style="flex: 0.6;">
-                    <span class="gf-label">Max Price Limit</span>
+                <div class="gf-input-group" style="flex: 0.7;">
+                    <span class="gf-label">Max Fare Limit</span>
                     <input type="number" id="gf-filter-price" class="gf-input" placeholder="Max Price ($)">
                 </div>
             </div>
@@ -270,8 +273,9 @@
             
             <div class="gf-right-container">
                 <div class="gf-matrix-tabs">
-                    <div id="gf-tab-best" class="gf-tab-item active">Best departing flights</div>
-                    <div id="gf-tab-other" class="gf-tab-item">Other departing flights</div>
+                    <div id="gf-tab-best" class="gf-tab-item active">Best flights</div>
+                    <div id="gf-tab-cheapest" class="gf-tab-item">Cheapest flights</div>
+                    <div id="gf-tab-other" class="gf-tab-item">Other flights</div>
                 </div>
                 <div id="gf-results-box" class="gf-results">
                     <div style="color: #71717a; text-align: center; margin-top: 150px; font-size: 14px;">
@@ -293,19 +297,16 @@
         toggleButton.style.display = 'flex';
     });
 
-    // Handle Tab switches natively inside the UI
-    document.getElementById('gf-tab-best').addEventListener('click', () => {
-        activeResultTab = 'best';
-        document.getElementById('gf-tab-best').classList.add('active');
-        document.getElementById('gf-tab-other').classList.remove('active');
+    // Tab interaction hooks
+    function setTabActive(tabName) {
+        activeResultTab = tabName;
+        document.querySelectorAll('.gf-tab-item').forEach(el => el.classList.remove('active'));
+        document.getElementById(`gf-tab-${tabName}`).classList.add('active');
         processAndRenderFilters();
-    });
-    document.getElementById('gf-tab-other').addEventListener('click', () => {
-        activeResultTab = 'other';
-        document.getElementById('gf-tab-other').classList.add('active');
-        document.getElementById('gf-tab-best').classList.remove('active');
-        processAndRenderFilters();
-    });
+    }
+    document.getElementById('gf-tab-best').addEventListener('click', () => setTabActive('best'));
+    document.getElementById('gf-tab-cheapest').addEventListener('click', () => setTabActive('cheapest'));
+    document.getElementById('gf-tab-other').addEventListener('click', () => setTabActive('other'));
 
     const dragHeader = document.getElementById('gf-draggable-header');
     let isDragging = false;
@@ -437,7 +438,6 @@
         const childrenCount = parseInt(document.getElementById('gf-filter-children').value) || 0;
         const passengerCount = adultsCount + childrenCount;
         
-        // Baggage parameter tracking fee components
         const carryOnBags = parseInt(document.getElementById('gf-bag-carry').value) || 0;
         const checkedBags = parseInt(document.getElementById('gf-bag-checked').value) || 0;
         const baggageSurchargeTotal = (carryOnBags * 25) + (checkedBags * 40);
@@ -455,9 +455,8 @@
         if (cabinClass === 'business') { classMultiplier = 2.2; classLabelText = 'Business Class'; }
         if (cabinClass === 'first') { classMultiplier = 4.0; classLabelText = 'First Class'; }
 
-        // Core base pass parsing pricing references
-        let parsedActivePriceArray = [];
-        let rawQualifiedItineraries = [];
+        let activePrices = [];
+        let evaluatedItineraries = [];
 
         compiledItineraries.forEach(itinerary => {
             const adjustedCost = Math.round((itinerary.totalCost * classMultiplier + baggageSurchargeTotal) * passengerCount);
@@ -480,62 +479,84 @@
                 if (!matchesAirline) return;
             }
 
-            parsedActivePriceArray.push(adjustedCost);
-            rawQualifiedItineraries.push({ data: itinerary, calculatedPrice: adjustedCost });
+            // Detect split-ticket status: If adjacent flights on the same leg belong to completely different airline groups
+            let isSplitTicket = false;
+            let currentAirlineGroup = null;
+            
+            itinerary.legs.forEach(leg => {
+                leg.forEach(flight => {
+                    if (!currentAirlineGroup) {
+                        currentAirlineGroup = flight.airlineName;
+                    } else if (currentAirlineGroup !== flight.airlineName) {
+                        isSplitTicket = true;
+                    }
+                });
+            });
+
+            activePrices.push(adjustedCost);
+            evaluatedItineraries.push({ data: itinerary, calculatedPrice: adjustedCost, isSplitTicket: isSplitTicket });
         });
 
-        if (rawQualifiedItineraries.length === 0) {
+        if (evaluatedItineraries.length === 0) {
             resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">No itineraries match your filters.</div>`;
             return;
         }
 
-        // Establish strict benchmark floors to trigger dynamic Price Guarantee badges (lowest 15%)
-        const priceFloorBoundary = Math.min(...parsedActivePriceArray) * 1.15;
+        const lowestPriceOverall = Math.min(...activePrices);
+        const guaranteeBoundary = lowestPriceOverall * 1.10; // Lowest 10% get the badge
 
-        // Apply selected dropdown sort parameters
+        // Apply Sorting Matrix
         if (sortByValue === 'price') {
-            rawQualifiedItineraries.sort((a, b) => a.calculatedPrice - b.calculatedPrice);
+            evaluatedItineraries.sort((a, b) => a.calculatedPrice - b.calculatedPrice);
         } else if (sortByValue === 'rating') {
-            rawQualifiedItineraries.sort((a, b) => (b.data.legs[0]?.[0]?.computedQuality || 0) - (a.data.legs[0]?.[0]?.computedQuality || 0));
+            evaluatedItineraries.sort((a, b) => (b.data.legs[0]?.[0]?.computedQuality || 0) - (a.data.legs[0]?.[0]?.computedQuality || 0));
         } else if (sortByValue === 'stops') {
-            rawQualifiedItineraries.sort((a, b) => {
+            evaluatedItineraries.sort((a, b) => {
                 const aStops = a.data.legs.reduce((acc, leg) => acc + (leg.length - 1), 0);
                 const bStops = b.data.legs.reduce((acc, leg) => acc + (leg.length - 1), 0);
                 return aStops - bStops;
             });
         }
 
-        // --- Google Flights Split-Panel Segment Sorting Logic Matrix ---
-        let bestFlightsSelection = [];
-        let otherFlightsSelection = [];
+        // --- Three Google Flights Category Separation Matrix ---
+        let tabBest = [];
+        let tabCheapest = [];
+        let tabOther = [];
 
-        // Best category looks for combinations that balance low connections, low cost, and high quality index
-        rawQualifiedItineraries.forEach(item => {
+        // 1. Cheapest bucket grabs the absolute absolute lowest priced lines
+        const costCapCheapest = lowestPriceOverall * 1.15; 
+
+        evaluatedItineraries.forEach(item => {
             const totalStops = item.data.legs.reduce((acc, l) => acc + (l.length - 1), 0);
-            const baseQuality = item.data.legs[0]?.[0]?.computedQuality || 50;
+            const scoreAvg = item.data.legs[0]?.[0]?.computedQuality || 50;
 
-            if (bestFlightsSelection.length < 3 && totalStops <= 1 && baseQuality >= 55) {
-                bestFlightsSelection.push(item);
+            if (item.calculatedPrice <= costCapCheapest && tabCheapest.length < 5) {
+                tabCheapest.push(item);
+            }
+            
+            // Best balances price, connection speeds, quality index, and prefers standard unified tickets
+            if (totalStops <= 1 && scoreAvg >= 60 && item.calculatedPrice <= lowestPriceOverall * 1.4 && !item.isSplitTicket && tabBest.length < 3) {
+                tabBest.push(item);
             } else {
-                otherFlightsSelection.push(item);
+                tabOther.push(item);
             }
         });
 
-        // Fallback checks if the 'Best' tier container returned empty configurations
-        if (bestFlightsSelection.length === 0) {
-            bestFlightsSelection = rawQualifiedItineraries.slice(0, 3);
-            otherFlightsSelection = rawQualifiedItineraries.slice(3);
-        }
+        // Safe Fallback overrides if specific tab logic blocks return zero items
+        if (tabBest.length === 0) tabBest = evaluatedItineraries.slice(0, 3);
+        if (tabCheapest.length === 0) tabCheapest = evaluatedItineraries.slice(0, 4);
 
-        const selectedTargetGroup = (activeResultTab === 'best') ? bestFlightsSelection : otherFlightsSelection;
+        let activeTargetGroup = tabBest;
+        if (activeResultTab === 'cheapest') activeTargetGroup = tabCheapest;
+        if (activeResultTab === 'other') activeTargetGroup = tabOther;
 
-        if (selectedTargetGroup.length === 0) {
-            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 60px;">No additional matching tracks grouped in this tier section.</div>`;
+        if (activeTargetGroup.length === 0) {
+            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 60px;">No additional itineraries found in this section category.</div>`;
             return;
         }
 
         resultsBox.innerHTML = '';
-        selectedTargetGroup.forEach(wrapper => {
+        activeTargetGroup.forEach(wrapper => {
             const itinerary = wrapper.data;
             const finalCalculatedCost = wrapper.calculatedPrice;
 
@@ -557,10 +578,13 @@
             if (finalCalculatedCost < 1200 * passengerCount) priceColorClass = 'p-low';
             if (finalCalculatedCost > 3000 * passengerCount) priceColorClass = 'p-high';
 
-            // Check and inject Google Flights Price Guarantee indicator matching bounds
-            let guaranteeBadgeMarkup = '';
-            if (finalCalculatedCost <= priceFloorBoundary) {
-                guaranteeBadgeMarkup = `<span class="gf-badge-guarantee">🛡️ Price Guarantee</span>`;
+            // Badge indicators matching conditions
+            let badgesHtml = '';
+            if (finalCalculatedCost <= guaranteeBoundary) {
+                badgesHtml += `<span class="gf-badge-guarantee">🛡️ Price Guarantee</span>`;
+            }
+            if (wrapper.isSplitTicket) {
+                badgesHtml += `<span class="gf-badge-selftransfer">⚠️ Multi-Ticket Split</span>`;
             }
 
             itinerary.legs.forEach((legFlights, index) => {
@@ -568,20 +592,25 @@
                 legsHtml += `<div style="font-size: 11px; text-transform: uppercase; color: #3b82f6; font-weight: bold; margin-top: 6px;">Leg ${index + 1}</div>`;
                 
                 legFlights.forEach((flight, fIndex) => {
+                    let segmentIsSplit = fIndex > 0 && legFlights[fIndex - 1].airlineName !== flight.airlineName;
+                    
                     if (fIndex > 0) {
                         const prevFlight = legFlights[fIndex - 1];
                         const layoverTime = flight.departure - prevFlight.arrival;
                         const isOvernight = layoverTime > 480 ? ' 🌙 (Overnight Layover)' : '';
                         
-                        // Google Flights Rule Integration: Flag short connections with tight warnings (< 50 minutes)
-                        let tightWarningClass = "";
-                        let tightWarningLabel = "";
-                        if (layoverTime < 50) {
-                            tightWarningClass = " tight-warning";
-                            tightWarningLabel = " ⚠️ Short connection warning";
+                        let layoverWarningStyle = "";
+                        let layoverWarningText = "";
+
+                        if (segmentIsSplit) {
+                            layoverWarningStyle = " selftransfer-warning";
+                            layoverWarningText = ` ⚠️ Self-transfer required at ${flight.fromAirportIata}. Collect luggage & re-check.`;
+                        } else if (layoverTime < 50) {
+                            layoverWarningStyle = " tight-warning";
+                            layoverWarningText = " ⚠️ Tight connection warning (less than 50m)";
                         }
 
-                        legsHtml += `<div class="gf-layover${tightWarningClass}">⏱️ Layover: ${formatDuration(layoverTime)}${isOvernight}${tightWarningLabel} at ${flight.fromAirportIata}</div>`;
+                        legsHtml += `<div class="gf-layover${layoverWarningStyle}">⏱️ Layover: ${formatDuration(layoverTime)}${isOvernight}${layoverWarningText}</div>`;
                     }
 
                     let badgeHtml = '';
@@ -619,15 +648,15 @@
                         { label: "Cabin Class", val: classLabelText },
                         { label: "Legroom", val: cabinClass === 'economy' ? (qScore > 70 ? 'Above-average legroom (81 cm)' : 'Standard legroom (78 cm)') : cabinClass === 'business' ? 'Plush deep space (96 cm)' : 'Full Lie-flat Private Suite' },
                         { label: "Wi-Fi", val: calculatedWifi },
-                        { label: "Power Outlets", val: calculatedPower },
-                        { label: "In-Flight Entertainment", val: calculatedIfe }
+                        { label: "Power Grid", val: calculatedPower },
+                        { label: "Entertainment", val: calculatedIfe }
                     ];
 
                     emissionsTotal += Math.round(durationMins * 4.2 * passengerCount);
 
                     combinedAmenitiesHtml += `
                         <div class="gf-detail-section">
-                            <div style="font-weight:bold; color:#60a5fa; margin-bottom:6px; font-size:12px;">Flight ${flight.flightCode || 'FLIGHT'} Details</div>
+                            <div style="font-weight:bold; color:#60a5fa; margin-bottom:6px; font-size:12px;">Flight ${flight.flightCode || 'FLIGHT'} Details ${segmentIsSplit ? '<span style="color:#c084fc;">(Separate Split Ticket)</span>' : ''}</div>
                             ${amenitiesList.map(a => `
                                 <div class="gf-detail-row">
                                     <span class="gf-detail-label">${a.label}:</span>
@@ -638,10 +667,10 @@
                     `;
 
                     legsHtml += `
-                        <div class="gf-leg">
+                        <div class="gf-leg ${segmentIsSplit ? 'split-ticket-segment' : ''}">
                             <div class="gf-leg-title">
                                 <span>✈️ ${flight.flightCode || 'FLIGHT'} (${flight.fromAirportIata} ➔ ${flight.toAirportIata})</span>
-                                <span>$${Math.round((flight.price * classMultiplier + (baggageSurchargeTotal / itinerary.legs.reduce((sum, leg) => sum + leg.length, 0))) * passengerCount)} ${badgeHtml}</span>
+                                <span>$${Math.round((flight.price * classMultiplier + (baggageSurchargeTotal / itinerary.legs.reduce((s, l) => s + l.length, 0))) * passengerCount)} ${badgeHtml}</span>
                             </div>
                             <div class="gf-leg-sub">
                                 <span>${flight.airlineName} • <i style="color: #a1a1aa;">${flight.airplaneModelName || 'Commercial Jet'}</i></span>
@@ -654,7 +683,7 @@
 
             card.innerHTML = `
                 <div class="gf-summary">
-                    <span class="gf-price ${priceColorClass}">$${finalCalculatedCost} ${guaranteeBadgeMarkup}</span>
+                    <span class="gf-price ${priceColorClass}">$${finalCalculatedCost} ${badgesHtml}</span>
                     <span style="font-size: 11px; color:#a1a1aa; font-weight:500;">📅 ${selectedDate || todayStr} (${passengerCount} pax)</span>
                     <span class="gf-stops">${totalStopsCount === 0 ? 'Nonstop Total' : totalStopsCount + ' Total Layovers'}</span>
                 </div>
@@ -663,7 +692,7 @@
                     ${combinedAmenitiesHtml}
                     <div class="gf-detail-section" style="border-top: 1px solid #3f3f46; margin-top: 4px; padding-top: 6px;">
                         <div class="gf-detail-row"><span class="gf-detail-label">Emissions estimate:</span><span class="gf-detail-val" style="color:#facc15;">${emissionsTotal} kg CO2e</span></div>
-                        <div class="gf-detail-row"><span class="gf-detail-label">Contrail warming potential:</span><span class="gf-detail-val" style="color:#a3e635;">Low</span></div>
+                        <div class="gf-detail-row"><span class="gf-detail-label">Contrail warming:</span><span class="gf-detail-val" style="color:#a3e635;">Low</span></div>
                     </div>
                 </div>
             `;
@@ -673,7 +702,7 @@
         const builderBox = document.getElementById('gf-legs-builder-box');
         if (builderBox.lastElementChild) {
             const finalDestinationCode = builderBox.lastElementChild.querySelector('.gf-loc-to').value.trim().toUpperCase();
-            updateTravelGuidePanels(finalDestinationCode, currentActivePrices);
+            updateTravelGuidePanels(finalDestinationCode, activePrices);
         }
     }
 
