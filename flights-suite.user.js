@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Dynamic Hub Routing Edition)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Global Router Edition)
 // @namespace    https://github.com/raid2256
-// @version      5.0
-// @description  Google Flights style suite with dynamic hub-bridging search backups, price insights, duration limits, self-transfer warnings, alliance detection, and 3 generic tabs.
+// @version      6.0
+// @description  Google Flights style suite with a built-in cross-hub navigation network, autocomplete matching translations, custom amenity criteria scaling, three generic tabs, and price insights.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -17,8 +17,8 @@
     let compiledItineraries = [];
     let activeResultTab = 'best'; 
 
-    // Global connector hubs mapping dictionary for smart routing fallback paths
-    const GLOBAL_ROUTING_HUBS = ["SYD", "MEL", "SIN", "DXB", "JFK", "LAX", "LHR", "HND", "DOH", "IST"];
+    // Target major global transfer hubs for fallback connection networks
+    const GLOBAL_ROUTING_HUBS = ["MEL", "SYD", "SIN", "DXB", "JFK", "LAX", "LHR", "HND", "DOH", "IST"];
 
     const allianceMap = {
         "Animals": ["Fox and Friends", "Cats", "The Panda", "Shiba", "Narwhal", "Dragon", "Goblins"],
@@ -171,14 +171,16 @@
         return null;
     }
 
-    // Helper map to translate text IATA strings to database IDs
+    // Resolves IATA strings or numeric inputs to active map features key IDs
     function lookupAirportId(iata) {
-        if (!isNaN(iata)) return iata; 
+        const cleanIata = String(iata).trim().toUpperCase();
+        if (!isNaN(cleanIata) && cleanIata.length > 0) return parseInt(cleanIata); 
+        
         if (typeof airports !== 'undefined' && airports.features) {
-            const match = airports.features.find(f => f.properties && f.properties.iata === iata);
+            const match = airports.features.find(f => f.properties && String(f.properties.iata).toUpperCase() === cleanIata);
             if (match) return match.properties.id;
         }
-        return iata;
+        return cleanIata;
     }
 
     const toggleButton = document.createElement('div');
@@ -403,13 +405,8 @@
         const summaryText = document.getElementById('gf-trend-summary-text');
         const insightsBox = document.getElementById('gf-price-insights-box');
 
-        const guide = dynamicGeoDirectory[destCode] || {
-            attractions: ["Local City Center", "Historical Landmarks District", "Botanical Public Gardens", "Regional History Museum"],
-            hotels: ["Grand Regency Corporate Inn ($145/nt)", "Metropolitan Plaza Resort ($210/nt)", "Express Terminal Airport Hotel ($85/nt)"]
-        };
-
-        attractionsBox.innerHTML = guide.attractions.map(item => `<div class="gf-list-item"><span>📍 ${item}</span></div>`).join('');
-        hotelsBox.innerHTML = guide.hotels.map(item => `<div class="gf-list-item"><span>🏨 ${item}</span></div>`).join('');
+        attractionsBox.innerHTML = `<div class='gf-list-item'><span>📍 Regional Sightseeing Tour</span></div>`;
+        hotelsBox.innerHTML = `<div class='gf-list-item'><span>🏨 Terminal Airport Resort ($140/nt)</span></div>`;
 
         chartBox.innerHTML = '';
         insightsBox.innerHTML = '';
@@ -432,7 +429,7 @@
 
         if (minPrice < lowFareThreshold) {
             const savingsDelta = Math.round(baselineAverage - minPrice);
-            insightsBox.innerHTML = `<span style="color:#4ade80;">🟢 Prices are low:</span> $${savingsDelta} cheaper than typical options for this destination code route.`;
+            insightsBox.innerHTML = `<span style="color:#4ade80;">🟢 Prices are low:</span> $${savingsDelta} cheaper than typical options for this route.`;
         } else if (minPrice > highFareThreshold) {
             const upchargeDelta = Math.round(minPrice - baselineAverage);
             insightsBox.innerHTML = `<span style="color:#f87171;">🔴 Prices are high:</span> $${upchargeDelta} more expensive than historical network route averages.`;
@@ -829,7 +826,6 @@
         return combined;
     }
 
-    // Advanced search logic thread engine supporting parallel connector hub fallback loops
     async function executeFlightSearch() {
         const resultsBox = document.getElementById('gf-results-box');
         const builderBox = document.getElementById('gf-legs-builder-box');
@@ -858,7 +854,6 @@
                 let fromId = lookupAirportId(leg.from);
                 let toId = lookupAirportId(leg.to);
 
-                // Try pulling direct path allocations first
                 let responseData = [];
                 try {
                     const directRes = await fetch(`/search-route/${fromId}/${toId}`);
@@ -867,34 +862,32 @@
                     console.warn(`Direct endpoint query failure on segment ${leg.from}->${leg.to}:`, e);
                 }
 
-                // --- SMART HUB ROUTING FALLBACK ENGINE ACTIVATION ---
-                // Triggered automatically if direct fetches are empty or unavailable
+                // --- ADVANCED KEY LOOKUP FALLBACK ENGINE ---
+                // Automatically triggers parallel searches through global connector hub database IDs if the grid returns empty
                 if (!responseData || responseData.length === 0) {
-                    console.log(`Direct path empty for ${leg.from}->${leg.to}. Deploying parallel connector hub grid loops...`);
+                    console.log(`Direct path empty for ${leg.from}->${leg.to}. Deploying parallel connector hub loops...`);
                     resultsBox.innerHTML = `<div style="color: #a78bfa; text-align: center; margin-top: 100px;">Direct path empty. Scouring global connector hubs for connections...</div>`;
                     
                     const hubQueries = [];
-                    GLOBAL_ROUTING_HUBS.forEach(hubIata => {
-                        // Skip if hub matches start/end locations to avoid infinite loops
-                        if (hubIata === leg.from || hubIata === leg.to) return;
+                    for (const hubIata of GLOBAL_ROUTING_HUBS) {
+                        if (hubIata === leg.from || hubIata === leg.to) continue;
                         
+                        // Translate the hub text into the active database ID integer on the fly
                         const targetHubId = lookupAirportId(hubIata);
                         if (!isNaN(targetHubId)) {
-                            // Query Leg A -> Hub and Hub -> Leg B simultaneously
                             const queryA = fetch(`/search-route/${fromId}/${targetHubId}`).then(r => r.ok ? r.json() : []);
                             const queryB = fetch(`/search-route/${targetHubId}/${toId}`).then(r => r.ok ? r.json() : []);
                             hubQueries.push(Promise.all([queryA, queryB]));
                         }
-                    });
+                    }
 
                     const hubResults = await Promise.all(hubQueries);
                     
-                    // Stitch the cross-hub path combinations together into standard layout arrays
+                    // Stitch the successful cross-hub legs back into unified flight itineraries
                     hubResults.forEach(([flightsToHub, flightsFromHub]) => {
                         if (flightsToHub && flightsToHub.length > 0 && flightsFromHub && flightsFromHub.length > 0) {
                             flightsToHub.forEach(itineraryA => {
                                 flightsFromHub.forEach(itineraryB => {
-                                    // Combine routes into a single continuous array
                                     responseData.push({
                                         route: [...itineraryA.route, ...itineraryB.route]
                                     });
