@@ -11,3 +11,5 @@ javascript:(function(){fetch('https://raw.githubusercontent.com/raid2256/advance
 
 
 When you click it the button to toggle the ui on and off should then appear.
+
+**REMEMBER TO COPY THE ENTIRE URL ABOVE, NOT JUST THE BLUE HIHGLIGHTED PARTS**
