@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Google Flights Suite (Max Details)
+// @name         MyFlyClub Google Flights Suite (Max Realism)
 // @namespace    https://github.com/raid2256
-// @version      1.4
-// @description  Advanced flight search with expandable info cards, detailed layovers, aircraft info, and mock sustainability specs.
+// @version      1.5
+// @description  Advanced flight search with cabin class, passenger count multipliers, realistic dates, and expandable info cards.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -18,7 +18,7 @@
     style.id = 'g-flights-styles';
     style.innerHTML = `
         #g-flights-suite {
-            position: fixed; top: 15px; right: 15px; width: 540px; height: 760px;
+            position: fixed; top: 15px; right: 15px; width: 550px; height: 780px;
             background: #121214; color: #e4e4e7; border: 1px solid #27272a;
             border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.7);
             z-index: 999999; font-family: system-ui, -apple-system, sans-serif;
@@ -28,11 +28,12 @@
         .gf-title { font-weight: 700; color: #60a5fa; font-size: 15px; display: flex; align-items: center; gap: 6px; }
         .gf-close { background: none; border: none; color: #a1a1aa; cursor: pointer; font-size: 16px; font-weight: bold; }
         .gf-close:hover { color: #f4f4f5; }
-        .gf-controls { padding: 16px; display: flex; flex-direction: column; gap: 12px; background: #18181b; border-bottom: 1px solid #27272a; }
-        .gf-row { display: flex; gap: 10px; }
-        .gf-input { flex: 1; padding: 10px; background: #27272a; border: 1px solid #3f3f46; color: #ffffff; border-radius: 8px; font-size: 13px; outline: none; }
+        .gf-controls { padding: 16px; display: flex; flex-direction: column; gap: 10px; background: #18181b; border-bottom: 1px solid #27272a; }
+        .gf-row { display: flex; gap: 8px; align-items: center; }
+        .gf-input { flex: 1; padding: 8px 10px; background: #27272a; border: 1px solid #3f3f46; color: #ffffff; border-radius: 8px; font-size: 13px; outline: none; }
         .gf-input:focus { border-color: #3b82f6; }
-        .gf-btn { background: #2563eb; color: #ffffff; border: none; padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; transition: background 0.2s; }
+        .gf-label { font-size: 11px; color: #a1a1aa; font-weight: 600; margin-bottom: -4px; margin-left: 2px; }
+        .gf-btn { background: #2563eb; color: #ffffff; border: none; padding: 8px 14px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; transition: background 0.2s; height: 36px; }
         .gf-btn:hover { background: #1d4ed8; }
         .gf-results { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: #09090b; }
         
@@ -84,32 +85,67 @@
         return { text: `Terrible (${score/10}/10)`, class: 'q-terrible' };
     }
 
+    // Set today's date format as a default placeholder input
+    const todayStr = new Date().toISOString().split('T')[0];
+
     const appContainer = document.createElement('div');
     appContainer.id = 'g-flights-suite';
     appContainer.innerHTML = `
         <div class="gf-header">
-            <span class="gf-title">✈️ Google Flights Suite (Advanced Layout)</span>
+            <span class="gf-title">✈️ Google Flights Suite (Max Realism)</span>
             <button id="gf-close-window" class="gf-close">✕</button>
         </div>
         <div class="gf-controls">
             <div class="gf-row">
-                <input type="text" id="gf-route-input" class="gf-input" placeholder="Codes or IDs (e.g. SYD, LAX, JFK)">
-                <button id="gf-submit-search" class="gf-btn">Search Route</button>
+                <div style="flex: 2; display: flex; flex-direction: column;">
+                    <span class="gf-label">Route Nodes</span>
+                    <input type="text" id="gf-route-input" class="gf-input" placeholder="Codes / IDs (e.g. SYD, LAX, JFK)">
+                </div>
+                <div style="flex: 1; display: flex; flex-direction: column;">
+                    <span class="gf-label">Departure Date</span>
+                    <input type="date" id="gf-date-input" class="gf-input" value="${todayStr}">
+                </div>
+                <button id="gf-submit-search" class="gf-btn" style="margin-top: 12px;">Search</button>
             </div>
+            
             <div class="gf-row">
-                <input type="text" id="gf-filter-airline" class="gf-input" placeholder="Filter Airline...">
-                <select id="gf-filter-stops" class="gf-input">
-                    <option value="all">Any connections</option>
-                    <option value="0">Direct/Nonstop Only</option>
-                    <option value="1">Max 1 Layover per leg</option>
-                    <option value="2">Max 2 Layovers per leg</option>
-                </select>
+                <div style="flex: 1; display: flex; flex-direction: column;">
+                    <span class="gf-label">Class</span>
+                    <select id="gf-filter-class" class="gf-input">
+                        <option value="economy">Economy</option>
+                        <option value="business">Business</option>
+                        <option value="first">First Class</option>
+                    </select>
+                </div>
+                <div style="flex: 1; display: flex; flex-direction: column;">
+                    <span class="gf-label">Passengers</span>
+                    <select id="gf-filter-passengers" class="gf-input">
+                        <option value="1">1 adult</option>
+                        <option value="2">2 adults</option>
+                        <option value="3">3 adults</option>
+                        <option value="4">4 adults</option>
+                        <option value="5">5 adults</option>
+                    </select>
+                </div>
+                <div style="flex: 1; display: flex; flex-direction: column;">
+                    <span class="gf-label">Max Connections</span>
+                    <select id="gf-filter-stops" class="gf-input">
+                        <option value="all">Any stops</option>
+                        <option value="0">Nonstop Only</option>
+                        <option value="1">Max 1 Layover</option>
+                        <option value="2">Max 2 Layovers</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="gf-row">
+                <input type="text" id="gf-filter-airline" class="gf-input" placeholder="Filter Airline Name...">
                 <input type="number" id="gf-filter-price" class="gf-input" placeholder="Max Price ($)">
             </div>
         </div>
         <div id="gf-results-box" class="gf-results">
             <div style="color: #71717a; text-align: center; margin-top: 100px; font-size: 14px;">
-                Enter single or multi-city nodes to load expandable itineraries.
+                Configure travel settings above and hit Search.
             </div>
         </div>
     `;
@@ -120,14 +156,26 @@
         const airlineQuery = document.getElementById('gf-filter-airline').value.toLowerCase();
         const maxStops = document.getElementById('gf-filter-stops').value;
         const maxPrice = parseFloat(document.getElementById('gf-filter-price').value) || Infinity;
+        
+        const cabinClass = document.getElementById('gf-filter-class').value;
+        const passengerCount = parseInt(document.getElementById('gf-filter-passengers').value) || 1;
+        const selectedDate = document.getElementById('gf-date-input').value;
 
         if (compiledItineraries.length === 0) {
             resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 50px;">No paths found.</div>`;
             return;
         }
 
+        // Apply Class Modifiers (Game baseline provides a base ticket cost, we simulate standard class scaling multipliers)
+        let classMultiplier = 1.0;
+        let classLabelText = 'Economy';
+        if (cabinClass === 'business') { classMultiplier = 2.2; classLabelText = 'Business Class'; }
+        if (cabinClass === 'first') { classMultiplier = 4.0; classLabelText = 'First Class'; }
+
         const filtered = compiledItineraries.filter(itinerary => {
-            if (itinerary.totalCost > maxPrice) return false;
+            const adjustedCost = Math.round(itinerary.totalCost * classMultiplier * passengerCount);
+            if (adjustedCost > maxPrice) return false;
+
             if (maxStops !== 'all') {
                 const structuralViolation = itinerary.legs.some(leg => (leg.length - 1) > parseInt(maxStops));
                 if (structuralViolation) return false;
@@ -142,7 +190,7 @@
         });
 
         if (filtered.length === 0) {
-            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">No itineraries match filters.</div>`;
+            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">No itineraries match your filters.</div>`;
             return;
         }
 
@@ -151,182 +199,5 @@
             const card = document.createElement('div');
             card.className = 'gf-card';
             
-            // Setup card toggle handler for expanding details drawer safely
             card.addEventListener('click', (e) => {
                 const detailsDrawer = card.querySelector('.gf-details');
-                if (detailsDrawer) detailsDrawer.classList.toggle('active');
-            });
-
-            let legsHtml = '';
-            let totalStopsCount = 0;
-            let combinedAmenitiesHtml = '';
-            let emissionsTotal = 0;
-
-            itinerary.legs.forEach((legFlights, index) => {
-                totalStopsCount += (legFlights.length - 1);
-                legsHtml += `<div style="font-size: 11px; text-transform: uppercase; color: #3b82f6; font-weight: bold; margin-top: 6px;">Leg ${index + 1}</div>`;
-                
-                legFlights.forEach((flight, fIndex) => {
-                    if (fIndex > 0) {
-                        const prevFlight = legFlights[fIndex - 1];
-                        const layoverTime = flight.departure - prevFlight.arrival;
-                        const isOvernight = layoverTime > 480 ? ' (Overnight Layover)' : '';
-                        legsHtml += `<div class="gf-layover">⏱️ Layover: ${formatDuration(layoverTime)}${isOvernight} at ${flight.fromAirportIata}</div>`;
-                    }
-
-                    let badgeHtml = '';
-                    if (flight.remarks && flight.remarks.includes('BEST_SELLER')) badgeHtml = `<span class="gf-badge">Best Seller</span>`;
-                    if (flight.remarks && flight.remarks.includes('BEST_DEAL')) badgeHtml = `<span class="gf-badge" style="background:#1e3a8a; color:#93c5fd;">Best Deal</span>`;
-
-                    const qTier = getQualityTier(flight.computedQuality || 50);
-
-                    // Scrape/Infer core specs from raw flight object parameters
-                    const rawFeatures = flight.features || [];
-                    const amenitiesList = [
-                        `Legroom: ${flight.computedQuality > 70 ? 'Above-average (81 cm)' : 'Standard (78 cm)'}`,
-                        `Wi-Fi: ${rawFeatures.includes('WIFI') ? 'Free or Premium' : 'Unavailable'}`,
-                        `Power: ${rawFeatures.includes('POWER_OUTLET') ? 'In-seat outlets & USB' : 'Not available'}`,
-                        `Entertainment: ${rawFeatures.includes('IFE') ? 'On-demand video' : 'Bring your own device'}`
-                    ];
-
-                    emissionsTotal += Math.round((flight.duration || 120) * 4.2);
-
-                    combinedAmenitiesHtml += `
-                        <div class="gf-detail-section">
-                            <div style="font-weight:bold; color:#60a5fa; margin-bottom:4px;">Flight ${flight.flightCode || 'FLIGHT'} Details</div>
-                            ${amenitiesList.map(a => `<div class="gf-detail-row"><span class="gf-detail-label">${a.split(':')[0]}:</span><span class="gf-detail-val">${a.split(':')[1]}</span></div>`).join('')}
-                        </div>
-                    `;
-
-                    legsHtml += `
-                        <div class="gf-leg">
-                            <div class="gf-leg-title">
-                                <span>✈️ ${flight.flightCode || 'FLIGHT'} (${flight.fromAirportIata} ➔ ${flight.toAirportIata})</span>
-                                <span>$${flight.price || 0} ${badgeHtml}</span>
-                            </div>
-                            <div class="gf-leg-sub">
-                                <span>${flight.airlineName} • <i style="color: #a1a1aa;">${flight.airplaneModelName || 'Commercial Jet'}</i></span>
-                                <span class="${qTier.class}" style="font-weight: 600;">${qTier.text}</span>
-                            </div>
-                        </div>
-                    `;
-                });
-            });
-
-            card.innerHTML = `
-                <div class="gf-summary">
-                    <span class="gf-price">$${itinerary.totalCost}</span>
-                    <span class="gf-stops">${totalStopsCount === 0 ? 'Nonstop Total' : totalStopsCount + ' Total Layovers'}</span>
-                </div>
-                <div class="gf-legs-container">${legsHtml}</div>
-                <div class="gf-details">
-                    ${combinedAmenitiesHtml}
-                    <div class="gf-detail-section" style="border-top: 1px solid #3f3f46; margin-top: 4px; padding-top: 6px;">
-                        <div class="gf-detail-row"><span class="gf-detail-label">Emissions Estimate:</span><span class="gf-detail-val" style="color:#facc15;">~${emissionsTotal} kg CO2e</span></div>
-                        <div class="gf-detail-row"><span class="gf-detail-label">Contrail Warming Potential:</span><span class="gf-detail-val" style="color:#a3e635;">Low</span></div>
-                    </div>
-                </div>
-            `;
-            resultsBox.appendChild(card);
-        });
-    }
-
-    function generatePermutations(legsArray) {
-        if (legsArray.length === 0) return [];
-        if (legsArray.length === 1) {
-            return legsArray[0].map(itineraryObj => ({
-                legs: [itineraryObj.route.filter(l => l.transportType === 'FLIGHT')],
-                totalCost: itineraryObj.route.reduce((acc, f) => acc + (f.price || 0), 0)
-            }));
-        }
-        const subPermutations = generatePermutations(legsArray.slice(1));
-        const currentLegOptions = legsArray[0];
-        const combined = [];
-
-        currentLegOptions.forEach(currentItinerary => {
-            const currentFlights = currentItinerary.route.filter(l => l.transportType === 'FLIGHT');
-            const currentCost = currentItinerary.route.reduce((acc, f) => acc + (f.price || 0), 0);
-            subPermutations.forEach(subItinerary => {
-                combined.push({
-                    legs: [currentFlights, ...subItinerary.legs],
-                    totalCost: currentCost + subItinerary.totalCost
-                });
-            });
-        });
-        return combined;
-    }
-
-    async function executeFlightSearch() {
-        const inputString = document.getElementById('gf-route-input').value.trim();
-        const resultsBox = document.getElementById('gf-results-box');
-
-        if (!inputString) {
-            resultsBox.innerHTML = `<div style="color: #f59e0b; text-align: center; margin-top: 50px;">Please specify Airport codes or IDs.</div>`;
-            return;
-        }
-
-        const inputs = inputString.split(',').map(item => item.trim().toUpperCase()).filter(item => item.length > 0);
-        if (inputs.length < 2) {
-            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">Minimum 2 airport steps required.</div>`;
-            return;
-        }
-
-        const airportIds = [];
-        let lookupError = false;
-
-        for (const input of inputs) {
-            if (!isNaN(input)) {
-                airportIds.push(input);
-            } else {
-                let foundId = null;
-                if (typeof airports !== 'undefined' && airports.features) {
-                    const match = airports.features.find(f => f.properties && f.properties.iata === input);
-                    if (match) foundId = match.properties.id;
-                }
-                if (foundId) {
-                    airportIds.push(foundId);
-                } else {
-                    resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">Could not map code "${input}" to an internal game ID.</div>`;
-                    lookupError = true;
-                    break;
-                }
-            }
-        }
-
-        if (lookupError) return;
-
-        resultsBox.innerHTML = `<div style="color: #60a5fa; text-align: center; margin-top: 100px;">Querying simulated routing layers...</div>`;
-        compiledItineraries = [];
-
-        try {
-            const fetchPromises = [];
-            for (let i = 0; i < airportIds.length - 1; i++) {
-                const fromNode = airportIds[i];
-                const toNode = airportIds[i+1];
-                fetchPromises.push(fetch(`/search-route/${fromNode}/${toNode}`).then(res => {
-                    if (!res.ok) throw new Error(`Network failure tracking segment ${fromNode}->${toNode}`);
-                    return res.json();
-                }));
-            }
-
-            const segmentsData = await Promise.all(fetchPromises);
-            compiledItineraries = generatePermutations(segmentsData);
-            compiledItineraries.sort((a, b) => a.totalCost - b.totalCost);
-            processAndRenderFilters();
-
-        } catch (error) {
-            console.error("G-Flights add-on crash logged:", error);
-            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">Error calculating interconnected connections.</div>`;
-        }
-    }
-
-    document.getElementById('gf-submit-search').addEventListener('click', executeFlightSearch);
-    document.getElementById('gf-filter-airline').addEventListener('input', processAndRenderFilters);
-    document.getElementById('gf-filter-stops').addEventListener('change', processAndRenderFilters);
-    document.getElementById('gf-filter-price').addEventListener('input', processAndRenderFilters);
-
-    document.getElementById('gf-close-window').addEventListener('click', () => {
-        appContainer.remove();
-        style.remove();
-    });
-})();
