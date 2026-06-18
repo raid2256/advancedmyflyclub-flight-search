@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Dynamic Live Edition)
+// @name         MyFlyClub Advanced Flight Search (Draggable Layout)
 // @namespace    https://github.com/raid2256
-// @version      2.1
-// @description  Google Flights clone with separate adult/child multi-passenger filters, live interactive bar charts, custom scrollboxes, and automated destination travel guide hooks.
+// @version      2.2
+// @description  Google Flights style suite with dynamic travel indexes, drag-and-drop workspace window repositioning, and click toggles.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -10,9 +10,9 @@
 (function() {
     'use strict';
 
-    if (document.getElementById('g-flights-suite')) {
-        document.getElementById('g-flights-suite').remove();
-    }
+    // Cleanup past instances
+    if (document.getElementById('g-flights-suite')) document.getElementById('g-flights-suite').remove();
+    if (document.getElementById('gf-toggle-handle')) document.getElementById('gf-toggle-handle').remove();
 
     const style = document.createElement('style');
     style.id = 'g-flights-styles';
@@ -22,12 +22,16 @@
             background: #121214; color: #e4e4e7; border: 1px solid #27272a;
             border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.7);
             z-index: 999999; font-family: system-ui, -apple-system, sans-serif;
-            display: flex; flex-direction: column; overflow: hidden;
+            display: none; flex-direction: column; overflow: hidden;
         }
-        .gf-header { background: #1e1e24; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #27272a; flex-shrink: 0; }
+        .gf-header { background: #1e1e24; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #27272a; flex-shrink: 0; cursor: move; user-select: none; }
         .gf-title { font-weight: 700; color: #60a5fa; font-size: 15px; display: flex; align-items: center; gap: 6px; }
         .gf-close { background: none; border: none; color: #a1a1aa; cursor: pointer; font-size: 16px; font-weight: bold; }
         .gf-close:hover { color: #f4f4f5; }
+        
+        /* Persistent Floating Toggle Launch Trigger */
+        #gf-toggle-handle { position: fixed; bottom: 20px; right: 20px; background: #2563eb; color: white; padding: 10px 16px; border-radius: 30px; font-weight: bold; font-size: 13px; cursor: pointer; z-index: 999998; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; gap: 6px; transition: background 0.2s, transform 0.15s; }
+        #gf-toggle-handle:hover { background: #1d4ed8; transform: translateY(-2px); }
         
         .gf-controls { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; background: #18181b; border-bottom: 1px solid #27272a; flex-shrink: 0; }
         .gf-row { display: flex; gap: 8px; align-items: flex-end; width: 100%; }
@@ -47,18 +51,15 @@
         
         .gf-workspace { display: flex; flex: 1; min-height: 0; overflow: hidden; background: #09090b; }
         
-        /* Left Travel Advisory Scrollbox Styles */
         .gf-left-advisory { width: 340px; border-right: 1px solid #27272a; background: #141416; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; }
         .gf-advisory-section { background: #1e1e24; border: 1px solid #27272a; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; }
         .gf-advisory-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #60a5fa; margin-bottom: 8px; letter-spacing: 0.5px; }
         
-        /* Interactive dynamic price distribution bars */
         .gf-chart-container { display: flex; align-items: flex-end; gap: 4px; height: 75px; padding-top: 10px; border-bottom: 1px solid #3f3f46; margin-bottom: 6px; }
         .gf-chart-bar { flex: 1; background: #2563eb; border-radius: 3px 3px 0 0; min-height: 3px; position: relative; transition: height 0.4s ease, background 0.3s; cursor: pointer; }
         .gf-chart-bar:hover { background: #3b82f6; }
         .gf-chart-bar.lowest-deal { background: #22c55e !important; }
         
-        /* Dedicated inner vertical scroll parameters for hotels & landmarks sections */
         .gf-scrollbox-inner { max-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 4px; }
         .gf-scrollbox-inner::-webkit-scrollbar { width: 4px; }
         .gf-scrollbox-inner::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
@@ -66,7 +67,6 @@
         .gf-list-item { font-size: 12px; padding: 6px 4px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; }
         .gf-list-item:last-child { border-bottom: none; }
         
-        /* Right Main Results Box Container Frame */
         .gf-results { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
         
         .gf-card { background: #1e1e24; border: 1px solid #27272a; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; transition: background 0.2s; }
@@ -119,12 +119,16 @@
         return { text: `Terrible (${score/10}/10)`, class: 'q-terrible' };
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    // 2. Build Floating Interactive Toggle Handle
+    const toggleButton = document.createElement('div');
+    toggleButton.id = 'gf-toggle-handle';
+    toggleButton.innerHTML = `<span>🌐</span> Open Advanced Flight Search`;
+    document.body.appendChild(toggleButton);
 
     const appContainer = document.createElement('div');
     appContainer.id = 'g-flights-suite';
     appContainer.innerHTML = `
-        <div class="gf-header">
+        <div id="gf-draggable-header" class="gf-header">
             <span class="gf-title">✈️ Advanced Flight Search</span>
             <button id="gf-close-window" class="gf-close">✕</button>
         </div>
@@ -203,7 +207,7 @@
             <div id="gf-left-panel" class="gf-left-advisory">
                 <div class="gf-advisory-section">
                     <div class="gf-advisory-title">Price Trends (Live Spread)</div>
-                    <div id="gf-trend-summary-text" style="font-size:11px; color:#a1a1aa; margin-bottom: 4px;">Submit search to plot price array distributions.</div>
+                    <div id="gf-trend-summary-text" style="font-size:11px; color:#a1a1aa; margin-bottom: 4px;">Submit search to plot distributions.</div>
                     <div id="gf-price-chart" class="gf-chart-container"></div>
                 </div>
                 <div class="gf-advisory-section">
@@ -229,6 +233,44 @@
     `;
     document.body.appendChild(appContainer);
 
+    // 3. Connect UI Toggle Launch Window Open/Close Listeners
+    toggleButton.addEventListener('click', () => {
+        appContainer.style.display = 'flex';
+        toggleButton.style.display = 'none';
+    });
+
+    document.getElementById('gf-close-window').addEventListener('click', () => {
+        appContainer.style.display = 'none';
+        toggleButton.style.display = 'flex';
+    });
+
+    // 4. Implement Desktop Window Mouse Drag Mechanics 
+    const dragHeader = document.getElementById('gf-draggable-header');
+    let isDragging = false;
+    let offsetX = 0, offsetY = 0;
+
+    dragHeader.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.gf-close')) return; // Ignore close box triggers
+        isDragging = true;
+        offsetX = e.clientX - appContainer.offsetLeft;
+        offsetY = e.clientY - appContainer.offsetTop;
+        document.addEventListener('mousemove', dragMove);
+        document.addEventListener('mouseup', stopDrag);
+    });
+
+    function dragMove(e) {
+        if (!isDragging) return;
+        appContainer.style.left = `${e.clientX - offsetX}px`;
+        appContainer.style.top = `${e.clientY - offsetY}px`;
+        appContainer.style.right = 'auto'; // Break standard fixed attachment anchors
+    }
+
+    function stopDrag() {
+        isDragging = false;
+        document.removeEventListener('mousemove', dragMove);
+        document.removeEventListener('mouseup', stopDrag);
+    }
+
     document.getElementById('gf-add-leg-trigger').addEventListener('click', () => {
         const builderBox = document.getElementById('gf-legs-builder-box');
         const currentCount = builderBox.children.length;
@@ -252,7 +294,6 @@
         builderBox.appendChild(newRow);
     });
 
-    // Real curated library data pull tracking flight hubs matching user choices
     const dynamicGeoDirectory = {
         "SYD": {
             attractions: ["Sydney Opera House", "Bondi Beach", "Sydney Harbour Bridge", "Darling Harbour", "The Rocks Landmark", "SEA LIFE Sydney Aquarium"],
@@ -278,7 +319,6 @@
         const chartBox = document.getElementById('gf-price-chart');
         const summaryText = document.getElementById('gf-trend-summary-text');
 
-        // Render dynamic local points of interest
         const guide = dynamicGeoDirectory[destCode] || {
             attractions: ["Local City Center", "Historical Landmarks District", "Botanical Public Gardens", "Regional History Museum"],
             hotels: ["Grand Regency Corporate Inn ($145/nt)", "Metropolitan Plaza Resort ($210/nt)", "Express Terminal Airport Hotel ($85/nt)"]
@@ -287,7 +327,6 @@
         attractionsBox.innerHTML = guide.attractions.map(item => `<div class="gf-list-item"><span>📍 ${item}</span></div>`).join('');
         hotelsBox.innerHTML = guide.hotels.map(item => `<div class="gf-list-item"><span>🏨 ${item}</span></div>`).join('');
 
-        // Generate the Live Price Frequency Distribution Chart
         chartBox.innerHTML = '';
         if (!generatedPrices || generatedPrices.length === 0) {
             summaryText.innerText = "No price distribution available.";
@@ -314,15 +353,12 @@
         distributionBuckets.forEach((count, idx) => {
             const bar = document.createElement('div');
             bar.className = 'gf-chart-bar';
-            
-            // Map proportional height metrics based on match frequencies
             const calculatedPercentage = (count / maxBucketCount) * 100;
             bar.style.height = `${Math.max(calculatedPercentage, 6)}%`;
             bar.title = `${count} itineraries around $${Math.round(minPrice + (idx * bucketSize))}`;
 
             if (idx === lowestOccupiedBucket) {
                 bar.className += ' lowest-deal';
-                bar.title += ' (Cheapest Target Variant)';
             }
             chartBox.appendChild(bar);
         });
@@ -351,7 +387,6 @@
         if (cabinClass === 'business') { classMultiplier = 2.2; classLabelText = 'Business Class'; }
         if (cabinClass === 'first') { classMultiplier = 4.0; classLabelText = 'First Class'; }
 
-        // Compile accurate prices array to regenerate trends map
         const currentActivePrices = [];
 
         let filtered = compiledItineraries.filter(itinerary => {
@@ -496,7 +531,6 @@
             resultsBox.appendChild(card);
         });
 
-        // Trigger dynamic side panel recalculations using current parameters
         const builderBox = document.getElementById('gf-legs-builder-box');
         if (builderBox.lastElementChild) {
             const finalDestinationCode = builderBox.lastElementChild.querySelector('.gf-loc-to').value.trim().toUpperCase();
@@ -552,7 +586,6 @@
 
         try {
             const fetchPromises = [];
-            
             for (const leg of rawNodes) {
                 let fromId = leg.from;
                 let toId = leg.to;
@@ -566,9 +599,7 @@
                     if (match) toId = match.properties.id;
                 }
 
-                if (isNaN(fromId) || isNaN(toId)) {
-                    throw new Error(`Failed code translation mapping.`);
-                }
+                if (isNaN(fromId) || isNaN(toId)) throw new Error(`Translation failure.`);
 
                 fetchPromises.push(fetch(`/search-route/${fromId}/${toId}`).then(res => {
                     if (!res.ok) throw new Error(`Segment mapping failed`);
@@ -578,12 +609,11 @@
 
             const segmentsData = await Promise.all(fetchPromises);
             compiledItineraries = generatePermutations(segmentsData);
-
             processAndRenderFilters();
 
         } catch (error) {
-            console.error("Search engine handled exception:", error);
-            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">Error calculating interconnected connections. Double check airport codes.</div>`;
+            console.error("Search thread failure caught:", error);
+            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">Error tracking routes. Check airport strings.</div>`;
         }
     }
 
@@ -596,9 +626,4 @@
     document.getElementById('gf-filter-children').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-date-input').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-matrix-sort').addEventListener('change', processAndRenderFilters);
-
-    document.getElementById('gf-close-window').addEventListener('click', () => {
-        appContainer.remove();
-        style.remove();
-    });
 })();
