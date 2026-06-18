@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Mobile Responsive)
+// @name         MyFlyClub Advanced Flight Search (Dynamic Amenities Edition)
 // @namespace    https://github.com/raid2256
-// @version      2.5
-// @description  Google Flights style suite with fixed control elements and responsive split layout structures.
+// @version      2.6
+// @description  Google Flights style suite with a fixed layout control matrix, vertical mobile viewports, and dynamic amenity criteria scaling.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -35,7 +35,6 @@
         #gf-toggle-handle { position: fixed; bottom: 20px; right: 20px; background: #2563eb; color: white; padding: 10px 16px; border-radius: 30px; font-weight: bold; font-size: 13px; cursor: pointer; z-index: 999998; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; gap: 6px; transition: background 0.2s, transform 0.15s; }
         #gf-toggle-handle:hover { background: #1d4ed8; transform: translateY(-2px); }
         
-        /* Layout Fix: Control block wrapper is now strictly rigid and unscrollable */
         .gf-controls { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; background: #18181b; border-bottom: 1px solid #27272a; flex-shrink: 0; }
         .gf-row { display: flex; gap: 8px; align-items: flex-end; width: 100%; flex-wrap: wrap; }
         .gf-input-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 100px; }
@@ -480,18 +479,46 @@
                     if (flight.remarks && flight.remarks.includes('BEST_SELLER')) badgeHtml = `<span class="gf-badge">Best Seller</span>`;
                     if (flight.remarks && flight.remarks.includes('BEST_DEAL')) badgeHtml = `<span class="gf-badge" style="background:#1e3a8a; color:#93c5fd;">Best Deal</span>`;
 
-                    const qTier = getQualityTier(flight.computedQuality || 50);
+                    const qScore = flight.computedQuality || 50;
+                    const qTier = getQualityTier(qScore);
                     const rawFeatures = flight.features || [];
-                    
+                    const durationMins = flight.duration || 120;
+
+                    // --- Advanced Amenity Logic Overhaul Matrix ---
+                    let calculatedWifi = "Wi-Fi / Unavailable";
+                    let calculatedIfe = "No streaming screens / Bring your own device";
+                    let calculatedPower = "No outlets available";
+
+                    // 1. Wi-Fi Criteria
+                    if (rawFeatures.includes('WIFI') || qScore >= 75) {
+                        calculatedWifi = "Free High-Speed Wi-Fi Included";
+                    } else if (qScore >= 45) {
+                        calculatedWifi = "Wi-Fi for a fee ($8.00 text pass / $18.00 stream)";
+                    }
+
+                    // 2. In-Flight Entertainment Criteria
+                    if (rawFeatures.includes('IFE') || (qScore >= 70 && durationMins >= 180)) {
+                        calculatedIfe = "On-demand seatback video monitors";
+                    } else if (qScore >= 45) {
+                        calculatedIfe = "Wireless entertainment (stream video to your phone)";
+                    }
+
+                    // 3. Power Grid Criteria
+                    if (rawFeatures.includes('POWER_OUTLET') || qScore >= 70 || cabinClass !== 'economy') {
+                        calculatedPower = "In-seat AC power outlets & USB ports";
+                    } else if (qScore >= 40) {
+                        calculatedPower = "In-seat USB-only charging ports";
+                    }
+
                     const amenitiesList = [
                         { label: "Cabin Class", val: classLabelText },
-                        { label: "Legroom", val: cabinClass === 'economy' ? (flight.computedQuality > 70 ? 'Above-average legroom (81 cm)' : 'Standard legroom (78 cm)') : cabinClass === 'business' ? 'Plush deep space (96 cm)' : 'Full Lie-flat Private Suite' },
-                        { label: "Wi-Fi", val: rawFeatures.includes('WIFI') ? 'Wi-Fi connectivity available' : 'Wi-Fi / Unavailable' },
-                        { label: "Power Outlets", val: rawFeatures.includes('POWER_OUTLET') ? 'In-seat power grids' : 'Outlets unavailable' },
-                        { label: "In-Flight Entertainment", val: rawFeatures.includes('IFE') ? 'On-demand video monitors' : 'No streaming screens' }
+                        { label: "Legroom", val: cabinClass === 'economy' ? (qScore > 70 ? 'Above-average legroom (81 cm)' : 'Standard legroom (78 cm)') : cabinClass === 'business' ? 'Plush deep space (96 cm)' : 'Full Lie-flat Private Suite' },
+                        { label: "Wi-Fi", val: calculatedWifi },
+                        { label: "Power Outlets", val: calculatedPower },
+                        { label: "In-Flight Entertainment", val: calculatedIfe }
                     ];
 
-                    emissionsTotal += Math.round((flight.duration || 120) * 4.2 * passengerCount);
+                    emissionsTotal += Math.round(durationMins * 4.2 * passengerCount);
 
                     combinedAmenitiesHtml += `
                         <div class="gf-detail-section">
