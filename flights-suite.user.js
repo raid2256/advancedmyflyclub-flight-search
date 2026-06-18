@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Alliance Suite)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Intelligence Edition)
 // @namespace    https://github.com/raid2256
-// @version      3.2
-// @description  Google Flights style suite with a built-in top 10 alliance directory, automatic alliance interline badges, bag fee matrices, and generic 3-tab results categories.
+// @version      4.0
+// @description  Google Flights style suite with Price Insights diagnostics, total duration limits, summary alert badges, alliance interlining, bag calculators, and 3 generic sorting tabs.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -95,9 +95,12 @@
         
         .gf-card { background: #1e1e24; border: 1px solid #27272a; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; transition: background 0.2s; }
         .gf-card:hover { background: #24242b; border-color: #3f3f46; }
-        .gf-summary { display: flex; justify-content: space-between; align-items: center; }
-        .gf-price { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 6px; wrap: flex-wrap; }
-        .gf-stops { font-size: 12px; color: #a1a1aa; background: #27272a; padding: 2px 8px; border-radius: 20px; }
+        .gf-summary { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+        .gf-price { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+        .gf-stops { font-size: 12px; color: #a1a1aa; background: #27272a; padding: 2px 8px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
+        
+        .gf-summary-badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
+        .gf-summary-alert { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: bold; }
         
         .gf-legs-container { display: flex; flex-direction: column; gap: 6px; }
         .gf-leg { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: #141416; border-radius: 6px; border-left: 3px solid #3b82f6; }
@@ -159,7 +162,6 @@
         return { text: `Terrible (${score/10}/10)`, class: 'q-terrible' };
     }
 
-    // Helper to find which alliance an airline belongs to
     function getAirlineAlliance(name) {
         for (const [allianceName, members] of Object.entries(allianceMap)) {
             if (members.includes(name)) return allianceName;
@@ -246,18 +248,22 @@
             </div>
 
             <div class="gf-row">
-                <div class="gf-input-group">
+                <div class="gf-input-group" style="flex: 1.2;">
                     <span class="gf-label">Alliance Filter</span>
                     <select id="gf-filter-alliance" class="gf-input">
                         <option value="all">All Alliances</option>
                         ${Object.keys(allianceMap).map(a => `<option value="${a}">${a}</option>`).join('')}
                     </select>
                 </div>
-                <div class="gf-input-group">
+                <div class="gf-input-group" style="flex: 1.2;">
                     <span class="gf-label">Airline Filter</span>
                     <input type="text" id="gf-filter-airline" class="gf-input" placeholder="e.g. Delta">
                 </div>
-                <div class="gf-input-group" style="flex: 0.5;">
+                <div class="gf-input-group" style="flex: 0.8;">
+                    <span class="gf-label">Max Duration (hrs)</span>
+                    <input type="number" id="gf-filter-duration" class="gf-input" placeholder="Any duration">
+                </div>
+                <div class="gf-input-group" style="flex: 0.6;">
                     <span class="gf-label">Stops Max</span>
                     <select id="gf-filter-stops" class="gf-input">
                         <option value="all">Any stops</option>
@@ -266,7 +272,7 @@
                         <option value="overnight">Overnight Tracks</option>
                     </select>
                 </div>
-                <div class="gf-input-group" style="flex: 0.5;">
+                <div class="gf-input-group" style="flex: 0.6;">
                     <span class="gf-label">Sort By</span>
                     <select id="gf-matrix-sort" class="gf-input">
                         <option value="price">Cheapest first</option>
@@ -274,8 +280,8 @@
                         <option value="stops">Fewest connections</option>
                     </select>
                 </div>
-                <div class="gf-input-group" style="flex: 0.5;">
-                    <span class="gf-label">Max Price Limit</span>
+                <div class="gf-input-group" style="flex: 0.6;">
+                    <span class="gf-label">Max Fare Limit</span>
                     <input type="number" id="gf-filter-price" class="gf-input" placeholder="Max Price ($)">
                 </div>
             </div>
@@ -287,6 +293,7 @@
                     <div class="gf-advisory-title">Price Trends (Live Spread)</div>
                     <div id="gf-trend-summary-text" style="font-size:11px; color:#a1a1aa; margin-bottom: 4px;">Submit search to plot distributions.</div>
                     <div id="gf-price-chart" class="gf-chart-container"></div>
+                    <div id="gf-price-insights-box" style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #27272a; font-size: 12px; font-weight: 500;"></div>
                 </div>
                 <div class="gf-advisory-section">
                     <div class="gf-advisory-title">Destination Attractions</div>
@@ -411,6 +418,7 @@
         const hotelsBox = document.getElementById('gf-hotels-box');
         const chartBox = document.getElementById('gf-price-chart');
         const summaryText = document.getElementById('gf-trend-summary-text');
+        const insightsBox = document.getElementById('gf-price-insights-box');
 
         const guide = dynamicGeoDirectory[destCode] || {
             attractions: ["Local City Center", "Historical Landmarks District", "Botanical Public Gardens", "Regional History Museum"],
@@ -421,6 +429,8 @@
         hotelsBox.innerHTML = guide.hotels.map(item => `<div class="gf-list-item"><span>🏨 ${item}</span></div>`).join('');
 
         chartBox.innerHTML = '';
+        insightsBox.innerHTML = '';
+
         if (!generatedPrices || generatedPrices.length === 0) {
             summaryText.innerText = "No price distribution available.";
             return;
@@ -429,6 +439,24 @@
         const minPrice = Math.min(...generatedPrices);
         const maxPrice = Math.max(...generatedPrices);
         summaryText.innerText = `Prices spread from $${minPrice} to $${maxPrice}.`;
+
+        // --- Feature 1: Price Insights Statistical Calculation Matrix ---
+        let priceSum = 0;
+        generatedPrices.forEach(p => priceSum += p);
+        const baselineAverage = priceSum / generatedPrices.length;
+        
+        const lowFareThreshold = baselineAverage * 0.88;
+        const highFareThreshold = baselineAverage * 1.12;
+
+        if (minPrice < lowFareThreshold) {
+            const savingsDelta = Math.round(baselineAverage - minPrice);
+            insightsBox.innerHTML = `<span style="color:#4ade80;">🟢 Prices are low:</span> $${savingsDelta} cheaper than typical options for this destination code route.`;
+        } else if (minPrice > highFareThreshold) {
+            const upchargeDelta = Math.round(minPrice - baselineAverage);
+            insightsBox.innerHTML = `<span style="color:#f87171;">🔴 Prices are high:</span> $${upchargeDelta} more expensive than historical network route averages.`;
+        } else {
+            insightsBox.innerHTML = `<span style="color:#facc15;">🟡 Prices are typical:</span> Current ticket prices are sitting within normal range bounds.`;
+        }
 
         const totalBarsCount = 16;
         const bucketSize = (maxPrice - minPrice) / totalBarsCount || 1;
@@ -463,6 +491,7 @@
         const airlineQuery = document.getElementById('gf-filter-airline').value.toLowerCase();
         const maxStops = document.getElementById('gf-filter-stops').value;
         const maxPrice = parseFloat(document.getElementById('gf-filter-price').value) || Infinity;
+        const maxDurationHrs = parseFloat(document.getElementById('gf-filter-duration').value) || Infinity;
         
         const cabinClass = document.getElementById('gf-filter-class').value;
         const adultsCount = parseInt(document.getElementById('gf-filter-adults').value) || 1;
@@ -510,32 +539,41 @@
                 if (!matchesAirline) return;
             }
 
-            // --- Alliance Filtering & Multi-Ticket Logic Engine ---
             let allianceMatchFailure = false;
             let isSplitTicket = false;
             let isAllianceInterline = false;
             let baseAlliance = null;
             let currentAirline = null;
+            
+            // --- Feature 2 & 3: Total Itinerary Time & Layover Delta Warning Analyzers ---
+            let totalTransitMinutes = 0;
+            let containsTightConnection = false;
 
             itinerary.legs.forEach(leg => {
-                leg.forEach(flight => {
+                leg.forEach((flight, fIndex) => {
+                    totalTransitMinutes += (flight.duration || 120);
+                    
+                    if (fIndex > 0) {
+                        const gapTime = flight.departure - leg[fIndex - 1].arrival;
+                        totalTransitMinutes += gapTime;
+                        if (gapTime < 50) containsTightConnection = true;
+                    }
+
                     const flAlliance = getAirlineAlliance(flight.airlineName);
                     
-                    // Filter dropdown check
                     if (selectedAlliance !== 'all') {
                         if (!flAlliance || flAlliance !== selectedAlliance) {
                             allianceMatchFailure = true;
                         }
                     }
 
-                    // Track if it's a split ticket or alliance partnership transfer
                     if (!currentAirline) {
                         currentAirline = flight.airlineName;
                         baseAlliance = flAlliance;
                     } else if (currentAirline !== flight.airlineName) {
                         isSplitTicket = true;
                         if (baseAlliance && baseAlliance === flAlliance) {
-                            isAllianceInterline = true; // Safe connection within same alliance!
+                            isAllianceInterline = true;
                         }
                     }
                 });
@@ -543,24 +581,30 @@
 
             if (allianceMatchFailure) return;
 
+            // --- Feature 3: Duration Slider Filter Constraint ---
+            const totalHoursElapsed = totalTransitMinutes / 60;
+            if (totalHoursElapsed > maxDurationHrs) return;
+
             activePrices.push(adjustedCost);
             evaluatedItineraries.push({ 
                 data: itinerary, 
                 calculatedPrice: adjustedCost, 
                 isSplitTicket: isSplitTicket,
-                isAllianceInterline: isAllianceInterline
+                isAllianceInterline: isAllianceInterline,
+                totalDurationMinutes: totalTransitMinutes,
+                hasTightLayover: containsTightConnection
             });
         });
 
         if (evaluatedItineraries.length === 0) {
-            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">No itineraries match your filters.</div>`;
+            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">No itineraries match your active slider filters.</div>`;
             return;
         }
 
         const lowestPriceOverall = Math.min(...activePrices);
         const guaranteeBoundary = lowestPriceOverall * 1.10; 
 
-        // Apply Sorting Matrix
+        // Sorting Parameters Engine
         if (sortByValue === 'price') {
             evaluatedItineraries.sort((a, b) => a.calculatedPrice - b.calculatedPrice);
         } else if (sortByValue === 'rating') {
@@ -573,7 +617,7 @@
             });
         }
 
-        // --- Generic Three Google Flights Section Split ---
+        // Generic 3-Tab Section Distributor
         let tabBest = [];
         let tabCheapest = [];
         let tabOther = [];
@@ -603,7 +647,7 @@
         if (activeResultTab === 'other') activeTargetGroup = tabOther;
 
         if (activeTargetGroup.length === 0) {
-            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 60px;">No additional itineraries found in this section category.</div>`;
+            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 60px;">No itineraries found in this section category.</div>`;
             return;
         }
 
@@ -630,15 +674,21 @@
             if (finalCalculatedCost < 1200 * passengerCount) priceColorClass = 'p-low';
             if (finalCalculatedCost > 3000 * passengerCount) priceColorClass = 'p-high';
 
-            // Top Summary Badges Matrix
-            let badgesHtml = '';
+            // Base pricing indicator tags
+            let summaryPriceBadges = '';
             if (finalCalculatedCost <= guaranteeBoundary) {
-                badgesHtml += `<span class="gf-badge-guarantee">🛡️ Price Guarantee</span>`;
+                summaryPriceBadges += `<span class="gf-badge-guarantee">🛡️ Price Guarantee</span>`;
             }
+
+            // --- Feature 2 & 4: Preview Card High-Level Summary Warnings ---
+            let cardPreviewAlerts = '';
             if (wrapper.isAllianceInterline) {
-                badgesHtml += `<span class="gf-badge-alliance">🤝 Alliance Interline</span>`;
+                summaryPriceBadges += `<span class="gf-badge-alliance">🤝 Alliance Interline</span>`;
             } else if (wrapper.isSplitTicket) {
-                badgesHtml += `<span class="gf-badge-selftransfer">⚠️ Multi-Ticket Split</span>`;
+                cardPreviewAlerts += `<span class="gf-summary-alert">⚠️ Self-transfer</span>`;
+            }
+            if (wrapper.hasTightLayover) {
+                cardPreviewAlerts += `<span class="gf-summary-alert">⚠️ Tight connection</span>`;
             }
 
             itinerary.legs.forEach((legFlights, index) => {
@@ -715,7 +765,6 @@
                     ];
 
                     emissionsTotal += Math.round(durationMins * 4.2 * passengerCount);
-
                     const currentAllianceName = getAirlineAlliance(flight.airlineName) || "Independent Carrier";
 
                     combinedAmenitiesHtml += `
@@ -753,8 +802,11 @@
 
             card.innerHTML = `
                 <div class="gf-summary">
-                    <span class="gf-price ${priceColorClass}">$${finalCalculatedCost} ${badgesHtml}</span>
-                    <span style="font-size: 11px; color:#a1a1aa; font-weight:500;">📅 ${selectedDate || todayStr} (${passengerCount} pax)</span>
+                    <div style="display:flex; flex-direction:column; gap:2px;">
+                        <span class="gf-price ${priceColorClass}">$${finalCalculatedCost} ${summaryPriceBadges}</span>
+                        <div class="gf-summary-badges">${cardPreviewAlerts}</div>
+                    </div>
+                    <span style="font-size: 11px; color:#a1a1aa; font-weight:500;">📅 ${selectedDate || todayStr} • ⏱️ ${formatDuration(wrapper.totalDurationMinutes)}</span>
                     <span class="gf-stops">${totalStopsCount === 0 ? 'Nonstop Total' : totalStopsCount + ' Total Layovers'}</span>
                 </div>
                 <div class="gf-legs-container">${legsHtml}</div>
@@ -858,6 +910,7 @@
     document.getElementById('gf-submit-search').addEventListener('click', executeFlightSearch);
     document.getElementById('gf-filter-alliance').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-filter-airline').addEventListener('input', processAndRenderFilters);
+    document.getElementById('gf-filter-duration').addEventListener('input', processAndRenderFilters);
     document.getElementById('gf-filter-stops').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-filter-price').addEventListener('input', processAndRenderFilters);
     document.getElementById('gf-filter-class').addEventListener('change', processAndRenderFilters);
