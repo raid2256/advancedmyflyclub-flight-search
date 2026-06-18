@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Suite)
+// @name         MyFlyClub Advanced Flight Search
 // @namespace    https://github.com/raid2256
 // @version      3.0
 // @description  Google Flights clone for MyFlyClub with tab splitting matrices, baggage weight surcharge calculators, connection warning trackers, and responsive mobile viewport layouts.
