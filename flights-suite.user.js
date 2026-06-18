@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Mobile Responsive)
+// @name         MyFlyClub Advanced Flight Search (Draggable Layout)
 // @namespace    https://github.com/raid2256
-// @version      2.4
-// @description  Google Flights style suite with a mobile responsive layout matrix and desktop drag-and-drop repositioning.
+// @version      2.3
+// @description  Google Flights style suite with dynamic travel indexes, drag-and-drop workspace window repositioning, and click toggles.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -10,9 +10,11 @@
 (function() {
     'use strict';
 
+    // Cleanup past instances
     if (document.getElementById('g-flights-suite')) document.getElementById('g-flights-suite').remove();
     if (document.getElementById('gf-toggle-handle')) document.getElementById('gf-toggle-handle').remove();
 
+    // Core variables needed early in the template markup
     const todayStr = new Date().toISOString().split('T')[0];
     let compiledItineraries = [];
 
@@ -25,7 +27,6 @@
             border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.7);
             z-index: 999999; font-family: system-ui, -apple-system, sans-serif;
             display: none; flex-direction: column; overflow: hidden;
-            max-width: calc(100vw - 30px); max-height: calc(100vh - 30px);
         }
         .gf-header { background: #1e1e24; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #27272a; flex-shrink: 0; cursor: move; user-select: none; }
         .gf-title { font-weight: 700; color: #60a5fa; font-size: 15px; display: flex; align-items: center; gap: 6px; }
@@ -35,9 +36,9 @@
         #gf-toggle-handle { position: fixed; bottom: 20px; right: 20px; background: #2563eb; color: white; padding: 10px 16px; border-radius: 30px; font-weight: bold; font-size: 13px; cursor: pointer; z-index: 999998; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; gap: 6px; transition: background 0.2s, transform 0.15s; }
         #gf-toggle-handle:hover { background: #1d4ed8; transform: translateY(-2px); }
         
-        .gf-controls { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; background: #18181b; border-bottom: 1px solid #27272a; flex-shrink: 0; overflow-y: auto; max-height: 40%; }
-        .gf-row { display: flex; gap: 8px; align-items: flex-end; width: 100%; flex-wrap: wrap; }
-        .gf-input-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 100px; }
+        .gf-controls { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; background: #18181b; border-bottom: 1px solid #27272a; flex-shrink: 0; }
+        .gf-row { display: flex; gap: 8px; align-items: flex-end; width: 100%; }
+        .gf-input-group { display: flex; flex-direction: column; gap: 4px; flex: 1; }
         .gf-input { width: 100%; padding: 8px 10px; background: #27272a; border: 1px solid #3f3f46; color: #ffffff; border-radius: 8px; font-size: 13px; outline: none; box-sizing: border-box; height: 36px; }
         .gf-input:focus { border-color: #3b82f6; }
         .gf-label { font-size: 11px; color: #a1a1aa; font-weight: 600; display: block; }
@@ -53,7 +54,7 @@
         
         .gf-workspace { display: flex; flex: 1; min-height: 0; overflow: hidden; background: #09090b; }
         
-        .gf-left-advisory { width: 340px; border-right: 1px solid #27272a; background: #141416; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; flex-shrink: 0; }
+        .gf-left-advisory { width: 340px; border-right: 1px solid #27272a; background: #141416; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; }
         .gf-advisory-section { background: #1e1e24; border: 1px solid #27272a; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; }
         .gf-advisory-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #60a5fa; margin-bottom: 8px; letter-spacing: 0.5px; }
         
@@ -102,16 +103,6 @@
         .q-average { color: #facc15; }
         .q-poor { color: #fb923c; }
         .q-terrible { color: #f87171; }
-
-        /* Media Queries: Collapse split panels vertically on mobile layouts */
-        @media (max-width: 768px) {
-            #g-flights-suite { width: 100vw; height: 90vh; top: 5vh; right: 0; left: 0; margin: auto; border-radius: 8px; }
-            .gf-workspace { flex-direction: column; overflow-y: auto; }
-            .gf-left-advisory { width: 100%; border-right: none; border-bottom: 1px solid #27272a; overflow-y: visible; }
-            .gf-results { overflow-y: visible; }
-            .gf-row { flex-direction: column; align-items: stretch; }
-            .gf-btn { width: 100%; margin-top: 4px; }
-        }
     `;
     document.head.appendChild(style);
 
@@ -129,6 +120,7 @@
         return { text: `Terrible (${score/10}/10)`, class: 'q-terrible' };
     }
 
+    // Build Floating Interactive Toggle Handle
     const toggleButton = document.createElement('div');
     toggleButton.id = 'gf-toggle-handle';
     toggleButton.innerHTML = `<span>🌐</span> Open Advanced Flight Search`;
@@ -257,7 +249,7 @@
     let offsetX = 0, offsetY = 0;
 
     dragHeader.addEventListener('mousedown', (e) => {
-        if (e.target.closest('.gf-close') || window.innerWidth <= 768) return; // Skip window move mechanics on phones
+        if (e.target.closest('.gf-close')) return;
         isDragging = true;
         offsetX = e.clientX - appContainer.offsetLeft;
         offsetY = e.clientY - appContainer.offsetTop;
