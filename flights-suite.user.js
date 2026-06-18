@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Intelligence Edition)
+// @name         MyFlyClub Advanced Flight Search (Dynamic Hub Routing Edition)
 // @namespace    https://github.com/raid2256
-// @version      4.0
-// @description  Google Flights style suite with Price Insights diagnostics, total duration limits, summary alert badges, alliance interlining, bag calculators, and 3 generic sorting tabs.
+// @version      5.0
+// @description  Google Flights style suite with dynamic hub-bridging search backups, price insights, duration limits, self-transfer warnings, alliance detection, and 3 generic tabs.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -17,7 +17,9 @@
     let compiledItineraries = [];
     let activeResultTab = 'best'; 
 
-    // Built-in top 10 virtual alliance registry map
+    // Global connector hubs mapping dictionary for smart routing fallback paths
+    const GLOBAL_ROUTING_HUBS = ["SYD", "MEL", "SIN", "DXB", "JFK", "LAX", "LHR", "HND", "DOH", "IST"];
+
     const allianceMap = {
         "Animals": ["Fox and Friends", "Cats", "The Panda", "Shiba", "Narwhal", "Dragon", "Goblins"],
         "Come To Brasil": ["Logic Air", "CityJet", "Global Connect", "Global Express", "Gondor Air", "Mordor Air", "Chungking Express"],
@@ -169,6 +171,16 @@
         return null;
     }
 
+    // Helper map to translate text IATA strings to database IDs
+    function lookupAirportId(iata) {
+        if (!isNaN(iata)) return iata; 
+        if (typeof airports !== 'undefined' && airports.features) {
+            const match = airports.features.find(f => f.properties && f.properties.iata === iata);
+            if (match) return match.properties.id;
+        }
+        return iata;
+    }
+
     const toggleButton = document.createElement('div');
     toggleButton.id = 'gf-toggle-handle';
     toggleButton.innerHTML = `<span>🌐</span> Open Advanced Flight Search`;
@@ -186,11 +198,11 @@
                 <div class="gf-leg-builder-row" data-leg-index="0">
                     <div class="gf-input-group">
                         <span class="gf-label">From</span>
-                        <input type="text" class="gf-input gf-loc-from" placeholder="e.g. DXB" value="DXB">
+                        <input type="text" class="gf-input gf-loc-from" placeholder="e.g. LST" value="LST">
                     </div>
                     <div class="gf-input-group">
                         <span class="gf-label">To</span>
-                        <input type="text" class="gf-input gf-loc-to" placeholder="e.g. SYD" value="SYD">
+                        <input type="text" class="gf-input gf-loc-to" placeholder="e.g. ISB" value="ISB">
                     </div>
                     <span style="width:20px;"></span>
                 </div>
@@ -325,16 +337,6 @@
     `;
     document.body.appendChild(appContainer);
 
-    toggleButton.addEventListener('click', () => {
-        appContainer.style.display = 'flex';
-        toggleButton.style.display = 'none';
-    });
-
-    document.getElementById('gf-close-window').addEventListener('click', () => {
-        appContainer.style.display = 'none';
-        toggleButton.style.display = 'flex';
-    });
-
     function setTabActive(tabName) {
         activeResultTab = tabName;
         document.querySelectorAll('.gf-tab-item').forEach(el => el.classList.remove('active'));
@@ -394,25 +396,6 @@
         builderBox.appendChild(newRow);
     });
 
-    const dynamicGeoDirectory = {
-        "SYD": {
-            attractions: ["Sydney Opera House", "Bondi Beach", "Sydney Harbour Bridge", "Darling Harbour", "The Rocks Landmark", "SEA LIFE Sydney Aquarium"],
-            hotels: ["Capella Sydney ($747/nt)", "Four Seasons Hotel Sydney ($390/nt)", "The Brighton MGallery ($349/nt)", "InterContinental Sydney ($310/nt)", "The Langham Sydney ($420/nt)"]
-        },
-        "DXB": {
-            attractions: ["Burj Khalifa Tower", "The Dubai Mall", "Dubai Miracle Garden", "Palm Jumeirah Resort", "Dubai Aquarium", "Museum of the Future"],
-            hotels: ["Dubai International Hotel ($240/nt)", "Le Méridien Dubai Conference Centre ($185/nt)", "Rove City Centre Deira ($95/nt)", "Holiday Inn Dubai Festival City ($120/nt)"]
-        },
-        "JFK": {
-            attractions: ["Times Square", "Central Park Waterfront", "Empire State Building", "Statue of Liberty Island", "The High Line Park", "Broadway Theatre Strip"],
-            hotels: ["The Plaza Hotel ($680/nt)", "TWA Hotel JFK Airport ($245/nt)", "Arlo NoMad ($215/nt)", "The Knickerbocker ($310/nt)"]
-        },
-        "LAX": {
-            attractions: ["Griffith Observatory", "Santa Monica Pier", "Hollywood Walk of Fame", "Universal Studios", "The Getty Center", "Venice Beach Boardwalk"],
-            hotels: ["The Beverly Hills Hotel ($750/nt)", "Shutters on the Beach ($510/nt)", "Hilton Los Angeles Airport ($160/nt)", "The Line Hotel ($195/nt)"]
-        }
-    };
-
     function updateTravelGuidePanels(destCode, generatedPrices) {
         const attractionsBox = document.getElementById('gf-attractions-box');
         const hotelsBox = document.getElementById('gf-hotels-box');
@@ -440,7 +423,6 @@
         const maxPrice = Math.max(...generatedPrices);
         summaryText.innerText = `Prices spread from $${minPrice} to $${maxPrice}.`;
 
-        // --- Feature 1: Price Insights Statistical Calculation Matrix ---
         let priceSum = 0;
         generatedPrices.forEach(p => priceSum += p);
         const baselineAverage = priceSum / generatedPrices.length;
@@ -506,7 +488,7 @@
         const sortByValue = document.getElementById('gf-matrix-sort').value;
 
         if (compiledItineraries.length === 0) {
-            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 50px;">No paths found.</div>`;
+            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 50px;">No paths found. Try adjusting parameters or check connection nodes.</div>`;
             return;
         }
 
@@ -545,7 +527,6 @@
             let baseAlliance = null;
             let currentAirline = null;
             
-            // --- Feature 2 & 3: Total Itinerary Time & Layover Delta Warning Analyzers ---
             let totalTransitMinutes = 0;
             let containsTightConnection = false;
 
@@ -581,7 +562,6 @@
 
             if (allianceMatchFailure) return;
 
-            // --- Feature 3: Duration Slider Filter Constraint ---
             const totalHoursElapsed = totalTransitMinutes / 60;
             if (totalHoursElapsed > maxDurationHrs) return;
 
@@ -604,7 +584,6 @@
         const lowestPriceOverall = Math.min(...activePrices);
         const guaranteeBoundary = lowestPriceOverall * 1.10; 
 
-        // Sorting Parameters Engine
         if (sortByValue === 'price') {
             evaluatedItineraries.sort((a, b) => a.calculatedPrice - b.calculatedPrice);
         } else if (sortByValue === 'rating') {
@@ -617,7 +596,6 @@
             });
         }
 
-        // Generic 3-Tab Section Distributor
         let tabBest = [];
         let tabCheapest = [];
         let tabOther = [];
@@ -647,7 +625,7 @@
         if (activeResultTab === 'other') activeTargetGroup = tabOther;
 
         if (activeTargetGroup.length === 0) {
-            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 60px;">No itineraries found in this section category.</div>`;
+            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 60px;">No additional itineraries found in this section category.</div>`;
             return;
         }
 
@@ -674,13 +652,11 @@
             if (finalCalculatedCost < 1200 * passengerCount) priceColorClass = 'p-low';
             if (finalCalculatedCost > 3000 * passengerCount) priceColorClass = 'p-high';
 
-            // Base pricing indicator tags
             let summaryPriceBadges = '';
             if (finalCalculatedCost <= guaranteeBoundary) {
                 summaryPriceBadges += `<span class="gf-badge-guarantee">🛡️ Price Guarantee</span>`;
             }
 
-            // --- Feature 2 & 4: Preview Card High-Level Summary Warnings ---
             let cardPreviewAlerts = '';
             if (wrapper.isAllianceInterline) {
                 summaryPriceBadges += `<span class="gf-badge-alliance">🤝 Alliance Interline</span>`;
@@ -853,6 +829,7 @@
         return combined;
     }
 
+    // Advanced search logic thread engine supporting parallel connector hub fallback loops
     async function executeFlightSearch() {
         const resultsBox = document.getElementById('gf-results-box');
         const builderBox = document.getElementById('gf-legs-builder-box');
@@ -875,35 +852,67 @@
         compiledItineraries = [];
 
         try {
-            const fetchPromises = [];
+            const segmentsData = [];
+
             for (const leg of rawNodes) {
-                let fromId = leg.from;
-                let toId = leg.to;
+                let fromId = lookupAirportId(leg.from);
+                let toId = lookupAirportId(leg.to);
 
-                if (isNaN(fromId) && typeof airports !== 'undefined' && airports.features) {
-                    const match = airports.features.find(f => f.properties && f.properties.iata === fromId);
-                    if (match) fromId = match.properties.id;
+                // Try pulling direct path allocations first
+                let responseData = [];
+                try {
+                    const directRes = await fetch(`/search-route/${fromId}/${toId}`);
+                    if (directRes.ok) responseData = await directRes.json();
+                } catch (e) {
+                    console.warn(`Direct endpoint query failure on segment ${leg.from}->${leg.to}:`, e);
                 }
-                if (isNaN(toId) && typeof airports !== 'undefined' && airports.features) {
-                    const match = airports.features.find(f => f.properties && f.properties.iata === toId);
-                    if (match) toId = match.properties.id;
+
+                // --- SMART HUB ROUTING FALLBACK ENGINE ACTIVATION ---
+                // Triggered automatically if direct fetches are empty or unavailable
+                if (!responseData || responseData.length === 0) {
+                    console.log(`Direct path empty for ${leg.from}->${leg.to}. Deploying parallel connector hub grid loops...`);
+                    resultsBox.innerHTML = `<div style="color: #a78bfa; text-align: center; margin-top: 100px;">Direct path empty. Scouring global connector hubs for connections...</div>`;
+                    
+                    const hubQueries = [];
+                    GLOBAL_ROUTING_HUBS.forEach(hubIata => {
+                        // Skip if hub matches start/end locations to avoid infinite loops
+                        if (hubIata === leg.from || hubIata === leg.to) return;
+                        
+                        const targetHubId = lookupAirportId(hubIata);
+                        if (!isNaN(targetHubId)) {
+                            // Query Leg A -> Hub and Hub -> Leg B simultaneously
+                            const queryA = fetch(`/search-route/${fromId}/${targetHubId}`).then(r => r.ok ? r.json() : []);
+                            const queryB = fetch(`/search-route/${targetHubId}/${toId}`).then(r => r.ok ? r.json() : []);
+                            hubQueries.push(Promise.all([queryA, queryB]));
+                        }
+                    });
+
+                    const hubResults = await Promise.all(hubQueries);
+                    
+                    // Stitch the cross-hub path combinations together into standard layout arrays
+                    hubResults.forEach(([flightsToHub, flightsFromHub]) => {
+                        if (flightsToHub && flightsToHub.length > 0 && flightsFromHub && flightsFromHub.length > 0) {
+                            flightsToHub.forEach(itineraryA => {
+                                flightsFromHub.forEach(itineraryB => {
+                                    // Combine routes into a single continuous array
+                                    responseData.push({
+                                        route: [...itineraryA.route, ...itineraryB.route]
+                                    });
+                                });
+                            });
+                        }
+                    });
                 }
 
-                if (isNaN(fromId) || isNaN(toId)) throw new Error(`Translation failure.`);
-
-                fetchPromises.push(fetch(`/search-route/${fromId}/${toId}`).then(res => {
-                    if (!res.ok) throw new Error(`Segment mapping failed`);
-                    return res.json();
-                }));
+                segmentsData.push(responseData);
             }
 
-            const segmentsData = await Promise.all(fetchPromises);
             compiledItineraries = generatePermutations(segmentsData);
             processAndRenderFilters();
 
         } catch (error) {
-            console.error("Search thread failure caught:", error);
-            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">Error tracking routes. Check airport strings.</div>`;
+            console.error("Search engine layer failure:", error);
+            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">Error mapping simulated tracks. Check airport strings.</div>`;
         }
     }
 
