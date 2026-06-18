@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Google Flights Suite (Advanced Layout)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Edition)
 // @namespace    https://github.com/raid2256
-// @version      1.7
-// @description  Advanced flight search engine with dynamic Multi-City leg additions, structural layout fixes, and complete metrics dropdowns.
+// @version      1.9
+// @description  Google Flights clone for MyFlyClub with independent multi-panel layouts, separate adults/children nodes, instant matrix sorting, price trends, and destination travel guides.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -18,7 +18,7 @@
     style.id = 'g-flights-styles';
     style.innerHTML = `
         #g-flights-suite {
-            position: fixed; top: 15px; right: 15px; width: 560px; height: 780px;
+            position: fixed; top: 15px; right: 15px; width: 880px; height: 800px;
             background: #121214; color: #e4e4e7; border: 1px solid #27272a;
             border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.7);
             z-index: 999999; font-family: system-ui, -apple-system, sans-serif;
@@ -29,29 +29,45 @@
         .gf-close { background: none; border: none; color: #a1a1aa; cursor: pointer; font-size: 16px; font-weight: bold; }
         .gf-close:hover { color: #f4f4f5; }
         
-        /* Layout fix: Increased padding/gap spacing matrix to prevent item collisions */
-        .gf-controls { padding: 16px; display: flex; flex-direction: column; gap: 14px; background: #18181b; border-bottom: 1px solid #27272a; flex-shrink: 0; }
-        .gf-row { display: flex; gap: 10px; align-items: flex-end; width: 100%; }
-        .gf-input-group { display: flex; flex-direction: column; gap: 6px; flex: 1; }
-        .gf-input { width: 100%; padding: 10px; background: #27272a; border: 1px solid #3f3f46; color: #ffffff; border-radius: 8px; font-size: 13px; outline: none; box-sizing: border-box; height: 38px; line-height: 1.2; }
+        .gf-controls { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; background: #18181b; border-bottom: 1px solid #27272a; flex-shrink: 0; }
+        .gf-row { display: flex; gap: 8px; align-items: flex-end; width: 100%; }
+        .gf-input-group { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+        .gf-input { width: 100%; padding: 8px 10px; background: #27272a; border: 1px solid #3f3f46; color: #ffffff; border-radius: 8px; font-size: 13px; outline: none; box-sizing: border-box; height: 36px; }
         .gf-input:focus { border-color: #3b82f6; }
-        .gf-label { font-size: 12px; color: #a1a1aa; font-weight: 600; display: block; }
+        .gf-label { font-size: 11px; color: #a1a1aa; font-weight: 600; display: block; }
         
-        /* Multi-City dynamic segments box */
-        .gf-legs-builder { display: flex; flex-direction: column; gap: 8px; max-height: 140px; overflow-y: auto; padding-right: 4px; }
-        .gf-leg-builder-row { display: flex; gap: 8px; align-items: center; background: #202024; padding: 6px; border-radius: 8px; border: 1px solid #27272a; }
-        .gf-add-leg-btn { background: none; border: 1px dashed #3f3f46; color: #60a5fa; padding: 6px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; text-align: center; width: 100%; transition: background 0.2s; }
+        .gf-legs-builder { display: flex; flex-direction: column; gap: 6px; max-height: 110px; overflow-y: auto; padding-right: 4px; }
+        .gf-leg-builder-row { display: flex; gap: 8px; align-items: center; background: #202024; padding: 4px 6px; border-radius: 8px; border: 1px solid #27272a; }
+        .gf-add-leg-btn { background: none; border: 1px dashed #3f3f46; color: #60a5fa; padding: 5px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; text-align: center; width: 100%; margin-top: -4px; }
         .gf-add-leg-btn:hover { background: rgba(59, 130, 246, 0.1); border-color: #3b82f6; }
-        .gf-remove-leg-btn { background: none; border: none; color: #f87171; cursor: pointer; font-size: 14px; padding: 0 6px; font-weight: bold; }
+        .gf-remove-leg-btn { background: none; border: none; color: #f87171; cursor: pointer; font-size: 13px; padding: 0 4px; font-weight: bold; }
 
-        .gf-btn { background: #2563eb; color: #ffffff; border: none; padding: 0 16px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; transition: background 0.2s; height: 38px; display: inline-flex; align-items: center; justify-content: center; }
+        .gf-btn { background: #2563eb; color: #ffffff; border: none; padding: 0 16px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; transition: background 0.2s; height: 36px; display: inline-flex; align-items: center; justify-content: center; }
         .gf-btn:hover { background: #1d4ed8; }
-        .gf-results { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: #09090b; }
+        
+        /* Layout Framework Split Panel Matrix Display */
+        .gf-workspace { display: flex; flex: 1; min-height: 0; overflow: hidden; background: #09090b; }
+        
+        /* Left-side travel advisory panel details */
+        .gf-left-advisory { width: 320px; border-right: 1px solid #27272a; background: #141416; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+        .gf-advisory-section { background: #1e1e24; border: 1px solid #27272a; border-radius: 8px; padding: 12px; }
+        .gf-advisory-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #60a5fa; margin-bottom: 8px; letter-spacing: 0.5px; }
+        
+        /* Dynamic Price graph bars styling layout */
+        .gf-chart-container { display: flex; align-items: flex-end; gap: 4px; height: 60px; padding-top: 10px; border-bottom: 1px solid #3f3f46; }
+        .gf-chart-bar { flex: 1; background: #3b82f6; border-radius: 2px 2px 0 0; min-height: 5px; transition: background 0.3s; }
+        .gf-chart-bar.active { background: #4ade80; }
+        
+        .gf-list-item { font-size: 12px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; }
+        .gf-list-item:last-child { border-bottom: none; }
+        
+        /* Right-side independent cards scroll feed layout container */
+        .gf-results { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
         
         .gf-card { background: #1e1e24; border: 1px solid #27272a; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; transition: background 0.2s; }
         .gf-card:hover { background: #24242b; border-color: #3f3f46; }
         .gf-summary { display: flex; justify-content: space-between; align-items: center; }
-        .gf-price { font-size: 18px; font-weight: 700; color: #4ade80; }
+        .gf-price { font-size: 18px; font-weight: 700; }
         .gf-stops { font-size: 12px; color: #a1a1aa; background: #27272a; padding: 2px 8px; border-radius: 20px; }
         
         .gf-legs-container { display: flex; flex-direction: column; gap: 6px; }
@@ -120,7 +136,7 @@
             <button id="gf-add-leg-trigger" class="gf-add-leg-btn">+ Add flight leg</button>
 
             <div class="gf-row">
-                <div class="gf-input-group" style="flex: 1.5;">
+                <div class="gf-input-group" style="flex: 1.2;">
                     <span class="gf-label">Departure Date</span>
                     <input type="date" id="gf-date-input" class="gf-input" value="${todayStr}">
                 </div>
@@ -137,44 +153,77 @@
             
             <div class="gf-row">
                 <div class="gf-input-group">
-                    <span class="gf-label">Passengers</span>
-                    <select id="gf-filter-passengers" class="gf-input">
+                    <span class="gf-label">Adults</span>
+                    <select id="gf-filter-adults" class="gf-input">
                         <option value="1">1 adult</option>
                         <option value="2">2 adults</option>
                         <option value="3">3 adults</option>
                     </select>
                 </div>
                 <div class="gf-input-group">
-                    <span class="gf-label">Max Connections</span>
-                    <select id="gf-filter-stops" class="gf-input">
-                        <option value="all">Any stops</option>
-                        <option value="0">Nonstop Only</option>
-                        <option value="1">Max 1 Layover</option>
-                        <option value="2">Max 2 Layovers</option>
-                        <option value="overnight">Overnight Flight Tracks</option>
+                    <span class="gf-label">Children</span>
+                    <select id="gf-filter-children" class="gf-input">
+                        <option value="0">0 children</option>
+                        <option value="1">1 child</option>
+                        <option value="2">2 children</option>
+                    </select>
+                </div>
+                <div class="gf-input-group">
+                    <span class="gf-label">Sort by</span>
+                    <select id="gf-matrix-sort" class="gf-input">
+                        <option value="price">Cheapest first</option>
+                        <option value="rating">Best ratings</option>
+                        <option value="stops">Fewest connections</option>
                     </select>
                 </div>
             </div>
 
             <div class="gf-row">
                 <input type="text" id="gf-filter-airline" class="gf-input" placeholder="Filter Airline Name...">
+                <select id="gf-filter-stops" class="gf-input" style="flex: 0.8;">
+                    <option value="all">Any stops</option>
+                    <option value="0">Nonstop Only</option>
+                    <option value="1">Max 1 Layover</option>
+                    <option value="overnight">Overnight Tracks</option>
+                </select>
                 <input type="number" id="gf-filter-price" class="gf-input" placeholder="Max Price ($)">
             </div>
         </div>
-        <div id="gf-results-box" class="gf-results">
-            <div style="color: #71717a; text-align: center; margin-top: 100px; font-size: 14px;">
-                Configure travel settings above and hit Search.
+        
+        <div class="gf-workspace">
+            <div id="gf-left-panel" class="gf-left-advisory">
+                <div class="gf-advisory-section">
+                    <div class="gf-advisory-title">Price History & Trends</div>
+                    <div style="font-size:11px; color:#a1a1aa;">Prices are currently typical for your itinerary selection.</div>
+                    <div id="gf-price-chart" class="gf-chart-container">
+                        </div>
+                </div>
+                <div class="gf-advisory-section">
+                    <div class="gf-advisory-title">Destination Top Attractions</div>
+                    <div id="gf-attractions-box" style="display:flex; flex-direction:column; gap:4px;">
+                        <span style="font-size:12px; color:#71717a;">Submit a route search to query local details.</span>
+                    </div>
+                </div>
+                <div class="gf-advisory-section">
+                    <div class="gf-advisory-title">Top Rated Local Hotels</div>
+                    <div id="gf-hotels-box" style="display:flex; flex-direction:column; gap:4px;">
+                        <span style="font-size:12px; color:#71717a;">Submit a route search to query local details.</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="gf-results-box" class="gf-results">
+                <div style="color: #71717a; text-align: center; margin-top: 150px; font-size: 14px;">
+                    Configure travel parameters above and hit Search.
+                </div>
             </div>
         </div>
     `;
     document.body.appendChild(appContainer);
 
-    // Dynamic Multi-City Leg Adder Controls Layer
     document.getElementById('gf-add-leg-trigger').addEventListener('click', () => {
         const builderBox = document.getElementById('gf-legs-builder-box');
         const currentCount = builderBox.children.length;
-        
-        // Get target default based on last row destination to smooth input chain flow
         const previousToVal = builderBox.lastElementChild.querySelector('.gf-loc-to').value.toUpperCase();
 
         const newRow = document.createElement('div');
@@ -191,13 +240,53 @@
             </div>
             <button class="gf-remove-leg-btn">✕</button>
         `;
-
-        newRow.querySelector('.gf-remove-leg-btn').addEventListener('click', () => {
-            newRow.remove();
-        });
-
+        newRow.querySelector('.gf-remove-leg-btn').addEventListener('click', () => { newRow.remove(); });
         builderBox.appendChild(newRow);
     });
+
+    // Mock Database Matrix layer providing dynamic, highly customized local geographic data views
+    const geoDataLibrary = {
+        "SYD": {
+            attractions: ["Sydney Opera House", "Darling Harbour", "Bondi Beach", "Taronga Zoo"],
+            hotels: ["The Fullerton Hotel ($245/nt)", "Park Hyatt Sydney ($520/nt)", "Shangri-La Sydney ($290/nt)"]
+        },
+        "DXB": {
+            attractions: ["Burj Khalifa", "The Dubai Mall", "Palm Jumeirah", "Dubai Miracle Garden"],
+            hotels: ["Burj Al Arab ($1200/nt)", "Atlantis The Palm ($450/nt)", "The Ritz-Carlton Dubai ($310/nt)"]
+        },
+        "JFK": {
+            attractions: ["Times Square", "Central Park", "Empire State Building", "Statue of Liberty"],
+            hotels: ["The Plaza Hotel ($650/nt)", "Arlo NoMad ($210/nt)", "TWA Hotel JFK Airport ($260/nt)"]
+        },
+        "AKL": {
+            attractions: ["Sky Tower", "Waiheke Island", "Auckland War Memorial Museum", "Mount Eden"],
+            hotels: ["Cordis Auckland ($190/nt)", "The Grand by SkyCity ($240/nt)", "SO/ Auckland ($225/nt)"]
+        }
+    };
+
+    function updateLeftPanelAdvisories(finalDestinationCode) {
+        const attractionsBox = document.getElementById('gf-attractions-box');
+        const hotelsBox = document.getElementById('gf-hotels-box');
+        const data = geoDataLibrary[finalDestinationCode] || {
+            attractions: ["Local City Center", "Historical Museum", "Public Botanical Gardens"],
+            hotels: ["Grand Plaza Luxury Resort ($180/nt)", "Express Business Airport Inn ($95/nt)"]
+        };
+
+        attractionsBox.innerHTML = data.attractions.map(a => `<div class="gf-list-item"><span>📍 ${a}</span></div>`).join('');
+        hotelsBox.innerHTML = data.hotels.map(h => `<div class="gf-list-item"><span>🏨 ${h}</span></div>`).join('');
+
+        // Generate Price Chart Bars Layout view
+        const chartBox = document.getElementById('gf-price-chart');
+        chartBox.innerHTML = '';
+        for (let i = 0; i < 18; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'gf-chart-bar';
+            const heightValue = Math.floor(Math.sin(i / 3) * 20) + 35;
+            bar.style.height = `${heightValue}px`;
+            if (i === 9) bar.className += ' active';
+            chartBox.appendChild(bar);
+        }
+    }
 
     function processAndRenderFilters() {
         const resultsBox = document.getElementById('gf-results-box');
@@ -206,8 +295,11 @@
         const maxPrice = parseFloat(document.getElementById('gf-filter-price').value) || Infinity;
         
         const cabinClass = document.getElementById('gf-filter-class').value;
-        const passengerCount = parseInt(document.getElementById('gf-filter-passengers').value) || 1;
+        const adultsCount = parseInt(document.getElementById('gf-filter-adults').value) || 1;
+        const childrenCount = parseInt(document.getElementById('gf-filter-children').value) || 0;
+        const passengerCount = adultsCount + childrenCount;
         const selectedDate = document.getElementById('gf-date-input').value;
+        const sortByValue = document.getElementById('gf-matrix-sort').value;
 
         if (compiledItineraries.length === 0) {
             resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 50px;">No paths found.</div>`;
@@ -219,7 +311,7 @@
         if (cabinClass === 'business') { classMultiplier = 2.2; classLabelText = 'Business Class'; }
         if (cabinClass === 'first') { classMultiplier = 4.0; classLabelText = 'First Class'; }
 
-        const filtered = compiledItineraries.filter(itinerary => {
+        let filtered = compiledItineraries.filter(itinerary => {
             const adjustedCost = Math.round(itinerary.totalCost * classMultiplier * passengerCount);
             if (adjustedCost > maxPrice) return false;
 
@@ -241,6 +333,23 @@
             }
             return true;
         });
+
+        // Instant Dynamic Array Sorting Controller Layer
+        if (sortByValue === 'price') {
+            filtered.sort((a, b) => a.totalCost - b.totalCost);
+        } else if (sortByValue === 'rating') {
+            filtered.sort((a, b) => {
+                const aRating = a.legs[0]?.[0]?.computedQuality || 0;
+                const bRating = b.legs[0]?.[0]?.computedQuality || 0;
+                return bRating - aRating;
+            });
+        } else if (sortByValue === 'stops') {
+            filtered.sort((a, b) => {
+                const aStops = a.legs.reduce((acc, leg) => acc + (leg.length - 1), 0);
+                const bStops = b.legs.reduce((acc, leg) => acc + (leg.length - 1), 0);
+                return aStops - bStops;
+            });
+        }
 
         if (filtered.length === 0) {
             resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">No itineraries match your filters.</div>`;
@@ -264,6 +373,11 @@
             let emissionsTotal = 0;
 
             const finalCalculatedCost = Math.round(itinerary.totalCost * classMultiplier * passengerCount);
+
+            // Dynamically assign Google Flights stylized price indicator coloring anchors
+            let priceColorClass = 'p-mid';
+            if (finalCalculatedCost < 1200 * passengerCount) priceColorClass = 'p-low';
+            if (finalCalculatedCost > 3000 * passengerCount) priceColorClass = 'p-high';
 
             itinerary.legs.forEach((legFlights, index) => {
                 totalStopsCount += (legFlights.length - 1);
@@ -323,7 +437,7 @@
 
             card.innerHTML = `
                 <div class="gf-summary">
-                    <span class="gf-price">$${finalCalculatedCost}</span>
+                    <span class="gf-price ${priceColorClass}">$${finalCalculatedCost}</span>
                     <span style="font-size: 11px; color:#a1a1aa; font-weight:500;">📅 ${selectedDate || todayStr} (${passengerCount} pax)</span>
                     <span class="gf-stops">${totalStopsCount === 0 ? 'Nonstop Total' : totalStopsCount + ' Total Layovers'}</span>
                 </div>
@@ -369,7 +483,6 @@
         const resultsBox = document.getElementById('gf-results-box');
         const builderBox = document.getElementById('gf-legs-builder-box');
         
-        // Dynamic node mapping array loop processing across builder layout items
         const rawNodes = [];
         Array.from(builderBox.children).forEach(row => {
             const fromCode = row.querySelector('.gf-loc-from').value.trim().toUpperCase();
@@ -380,11 +493,11 @@
         });
 
         if (rawNodes.length === 0) {
-            resultsBox.innerHTML = `<div style="color: #f59e0b; text-align: center; margin-top: 50px;">Please specify structural destination pairs.</div>`;
+            resultsBox.innerHTML = `<div style="color: #f59e0b; text-align: center; margin-top: 50px;">Please specify destination pairs.</div>`;
             return;
         }
 
-        resultsBox.innerHTML = `<div style="color: #60a5fa; text-align: center; margin-top: 100px;">Mapping structural layout arrays...</div>`;
+        resultsBox.innerHTML = `<div style="color: #60a5fa; text-align: center; margin-top: 100px;">Querying simulated routing networks...</div>`;
         compiledItineraries = [];
 
         try {
@@ -394,7 +507,6 @@
                 let fromId = leg.from;
                 let toId = leg.to;
 
-                // Handle global airport object parsing lookups for string codes
                 if (isNaN(fromId) && typeof airports !== 'undefined' && airports.features) {
                     const match = airports.features.find(f => f.properties && f.properties.iata === fromId);
                     if (match) fromId = match.properties.id;
@@ -405,7 +517,7 @@
                 }
 
                 if (isNaN(fromId) || isNaN(toId)) {
-                    throw new Error(`Failed code translation mapping for parameters.`);
+                    throw new Error(`Failed code translation mapping.`);
                 }
 
                 fetchPromises.push(fetch(`/search-route/${fromId}/${toId}`).then(res => {
@@ -416,12 +528,16 @@
 
             const segmentsData = await Promise.all(fetchPromises);
             compiledItineraries = generatePermutations(segmentsData);
-            compiledItineraries.sort((a, b) => a.totalCost - b.totalCost);
+            
+            // Execute lateral travel guide layout updates targeting the absolute final leg node destination
+            const ultimateDestination = rawNodes[rawNodes.length - 1].to;
+            updateLeftPanelAdvisories(ultimateDestination);
+
             processAndRenderFilters();
 
         } catch (error) {
-            console.error("Advanced search thread exception handled:", error);
-            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">Error calculating interconnected routing pairs. Check airport codes.</div>`;
+            console.error("Advanced search engine error exception handled:", error);
+            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">Error calculating interconnected connections. Double check airport codes.</div>`;
         }
     }
 
@@ -430,8 +546,10 @@
     document.getElementById('gf-filter-stops').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-filter-price').addEventListener('input', processAndRenderFilters);
     document.getElementById('gf-filter-class').addEventListener('change', processAndRenderFilters);
-    document.getElementById('gf-filter-passengers').addEventListener('change', processAndRenderFilters);
+    document.getElementById('gf-filter-adults').addEventListener('change', processAndRenderFilters);
+    document.getElementById('gf-filter-children').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-date-input').addEventListener('change', processAndRenderFilters);
+    document.getElementById('gf-matrix-sort').addEventListener('change', processAndRenderFilters);
 
     document.getElementById('gf-close-window').addEventListener('click', () => {
         appContainer.remove();
