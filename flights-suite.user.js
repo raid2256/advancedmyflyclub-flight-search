@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MyFlyClub Advanced Flight Search (Draggable Layout)
 // @namespace    https://github.com/raid2256
-// @version      2.2
+// @version      2.3
 // @description  Google Flights style suite with dynamic travel indexes, drag-and-drop workspace window repositioning, and click toggles.
 // @match        *://*.myfly.club/*
 // @grant        none
@@ -13,6 +13,10 @@
     // Cleanup past instances
     if (document.getElementById('g-flights-suite')) document.getElementById('g-flights-suite').remove();
     if (document.getElementById('gf-toggle-handle')) document.getElementById('gf-toggle-handle').remove();
+
+    // Core variables needed early in the template markup
+    const todayStr = new Date().toISOString().split('T')[0];
+    let compiledItineraries = [];
 
     const style = document.createElement('style');
     style.id = 'g-flights-styles';
@@ -29,7 +33,6 @@
         .gf-close { background: none; border: none; color: #a1a1aa; cursor: pointer; font-size: 16px; font-weight: bold; }
         .gf-close:hover { color: #f4f4f5; }
         
-        /* Persistent Floating Toggle Launch Trigger */
         #gf-toggle-handle { position: fixed; bottom: 20px; right: 20px; background: #2563eb; color: white; padding: 10px 16px; border-radius: 30px; font-weight: bold; font-size: 13px; cursor: pointer; z-index: 999998; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; gap: 6px; transition: background 0.2s, transform 0.15s; }
         #gf-toggle-handle:hover { background: #1d4ed8; transform: translateY(-2px); }
         
@@ -103,8 +106,6 @@
     `;
     document.head.appendChild(style);
 
-    let compiledItineraries = [];
-
     function formatDuration(minutes) {
         const h = Math.floor(minutes / 60);
         const m = minutes % 60;
@@ -119,7 +120,7 @@
         return { text: `Terrible (${score/10}/10)`, class: 'q-terrible' };
     }
 
-    // 2. Build Floating Interactive Toggle Handle
+    // Build Floating Interactive Toggle Handle
     const toggleButton = document.createElement('div');
     toggleButton.id = 'gf-toggle-handle';
     toggleButton.innerHTML = `<span>🌐</span> Open Advanced Flight Search`;
@@ -233,7 +234,6 @@
     `;
     document.body.appendChild(appContainer);
 
-    // 3. Connect UI Toggle Launch Window Open/Close Listeners
     toggleButton.addEventListener('click', () => {
         appContainer.style.display = 'flex';
         toggleButton.style.display = 'none';
@@ -244,13 +244,12 @@
         toggleButton.style.display = 'flex';
     });
 
-    // 4. Implement Desktop Window Mouse Drag Mechanics 
     const dragHeader = document.getElementById('gf-draggable-header');
     let isDragging = false;
     let offsetX = 0, offsetY = 0;
 
     dragHeader.addEventListener('mousedown', (e) => {
-        if (e.target.closest('.gf-close')) return; // Ignore close box triggers
+        if (e.target.closest('.gf-close')) return;
         isDragging = true;
         offsetX = e.clientX - appContainer.offsetLeft;
         offsetY = e.clientY - appContainer.offsetTop;
@@ -262,7 +261,7 @@
         if (!isDragging) return;
         appContainer.style.left = `${e.clientX - offsetX}px`;
         appContainer.style.top = `${e.clientY - offsetY}px`;
-        appContainer.style.right = 'auto'; // Break standard fixed attachment anchors
+        appContainer.style.right = 'auto';
     }
 
     function stopDrag() {
