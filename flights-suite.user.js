@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         MyFlyClub Advanced Flight Search (Ultimate Full-Feature Edition)
 // @namespace    https://github.com/raid2256
-// @version      7.7
-// @description  Fully-featured Google Flights style suite with robust flat-payload mapping, travel directories, multi-hub bridging backups, customizable baggage weight modifiers, and smooth tab rendering.
+// @version      7.8
+// @description  Fully-featured Google Flights style suite with dynamic travel directories, multi-hub bridging backups, customizable baggage weight modifiers, flat-payload mapping, and smooth tab rendering.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -125,7 +125,7 @@
         .gf-card { background: #1e1e24; border: 1px solid #27272a; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; transition: background 0.2s; }
         .gf-card:hover { background: #24242b; border-color: #3f3f46; }
         .gf-summary { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
-        .gf-price { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+        .gf-price { font-size: 18px; font-weight: 700; color: #22c55e; display: flex; align-items: center; gap: 6px; }
         .gf-stops { font-size: 12px; color: #a1a1aa; background: #27272a; padding: 2px 8px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
         
         .gf-legs-container { display: flex; flex-direction: column; gap: 6px; }
@@ -306,12 +306,10 @@
                     if (Array.isArray(leg)) {
                         leg.forEach((flight, fIndex) => {
                             totalTransitMinutes += (flight.duration || 120);
-                            
                             if (fIndex > 0) {
                                 const gapTime = flight.departure - leg[fIndex - 1].arrival;
                                 totalTransitMinutes += gapTime;
                             }
-
                             const flAlliance = getAirlineAlliance(flight.airlineName);
                             if (selectedAlliance !== 'all' && (!flAlliance || flAlliance !== selectedAlliance)) {
                                 allianceMatchFailure = true;
@@ -453,13 +451,16 @@
         }
     }
 
-    // Fully adaptive payload mapping database parser
+    // Fully adaptive structural database payload compiler
     function generatePermutations(legsArray) {
         if (!legsArray || legsArray.length === 0) return [];
         
-        if (legsArray.length === 1) {
-            return legsArray[0].map(itineraryObj => {
-                // Completely safe adaptive mapping: supports flat objects or deeply nested structures uniformly
+        // Dynamic payload validation normalization step
+        const normalizedLegs = legsArray.map(legOption => {
+            if (!Array.isArray(legOption)) return [];
+            return legOption.map(itineraryObj => {
+                if (!itineraryObj) return null;
+                
                 let flights = [];
                 if (itineraryObj.route) {
                     flights = Array.isArray(itineraryObj.route) ? itineraryObj.route : [itineraryObj.route];
@@ -469,9 +470,8 @@
                     flights = itineraryObj;
                 }
 
-                // Total cost safety calculations
                 let cost = 0;
-                if (typeof itineraryObj.price !== 'undefined') {
+                if (itineraryObj.price !== undefined) {
                     cost = parseFloat(itineraryObj.price) || 0;
                 } else if (itineraryObj.route) {
                     cost = itineraryObj.route.reduce((acc, f) => acc + (parseFloat(f.price) || 0), 0);
@@ -480,31 +480,30 @@
                 }
 
                 return { legs: [flights], totalCost: cost };
-            }).filter(item => item.legs[0].length > 0);
+            }).filter(item => item !== null && item.legs[0].length > 0);
+        });
+
+        if (normalizedLegs.length === 0 || normalizedLegs[0].length === 0) return [];
+
+        if (normalizedLegs.length === 1) {
+            return normalizedLegs[0];
         }
 
-        const subPermutations = generatePermutations(legsArray.slice(1));
-        const currentLegOptions = legsArray[0];
+        // Recursive dynamic combinations builder for multi-leg structures
+        const subPermutations = generatePermutations(normalizedLegs.slice(1));
+        const currentLegOptions = normalizedLegs[0];
         const combined = [];
 
         currentLegOptions.forEach(currentItinerary => {
-            let currentFlights = [];
-            if (currentItinerary.route) {
-                currentFlights = Array.isArray(currentItinerary.route) ? currentItinerary.route : [currentItinerary.route];
-            } else if (currentItinerary.fromAirportIata || currentItinerary.flightCode) {
-                currentFlights = [currentItinerary];
-            }
-
-            let currentCost = parseFloat(currentItinerary.price) || 0;
+            const currentFlights = currentItinerary.legs[0];
+            const currentCost = currentItinerary.totalCost;
             
-            if (currentFlights.length > 0) {
-                subPermutations.forEach(subItinerary => {
-                    combined.push({
-                        legs: [currentFlights, ...subItinerary.legs],
-                        totalCost: currentCost + subItinerary.totalCost
-                    });
+            subPermutations.forEach(subItinerary => {
+                combined.push({
+                    legs: [currentFlights, ...subItinerary.legs],
+                    totalCost: currentCost + subItinerary.totalCost
                 });
-            }
+            });
         });
         return combined;
     }
@@ -522,7 +521,7 @@
         let toId = lookupAirportId(toCode);
         
         if (!fromId || !toId) { 
-            resultsBox.innerHTML = `<div style="color: #fb923c; text-align: center; margin-top: 50px;">Could not resolve Airport Unique IDs. Make sure to use codes listed in the game directory.</div>`; 
+            resultsBox.innerHTML = `<div style="color: #fb923c; text-align: center; margin-top: 50px;">Could not resolve Airport Unique IDs. Check entry fields.</div>`; 
             return; 
         }
 
@@ -533,7 +532,7 @@
             if (directRes.ok) responseData = await directRes.json();
         } catch (e) {}
 
-        // Fire full Multi-Hub Bridging loop engine if direct flight array is empty or structurally missing
+        // Fire full Multi-Hub Bridging engine loop if direct results array is empty or structurally missing
         if (!responseData || !Array.isArray(responseData) || responseData.length === 0) {
             responseData = [];
             const hubQueries = GLOBAL_ROUTING_HUBS.map(hub => {
@@ -550,7 +549,6 @@
                 if (Array.isArray(flightsToHub) && Array.isArray(flightsFromHub)) {
                     flightsToHub.forEach(itA => {
                         flightsFromHub.forEach(itB => {
-                            // Synthesize valid interconnected routes from segments
                             let routeArr = [];
                             if (itA.route) routeArr = routeArr.concat(itA.route); else routeArr.push(itA);
                             if (itB.route) routeArr = routeArr.concat(itB.route); else routeArr.push(itB);
@@ -601,7 +599,6 @@
 
         toggleEl.addEventListener('click', () => { 
             suiteEl.style.setProperty('display', 'flex', 'important'); 
-            toggleEl.style.setProperty('none', 'important'); 
             toggleEl.style.display = 'none';
         });
         document.getElementById('gf-close-window').addEventListener('click', () => { 
