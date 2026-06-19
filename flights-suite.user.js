@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Optimized Modular Build)
+// @name         MyFlyClub Advanced Flight Search (Full Feature Restoration)
 // @namespace    https://github.com/raid2256
-// @version      6.4
+// @version      6.5
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -52,6 +52,10 @@
         .gf-advisory-section { background: #1e1e24; border: 1px solid #27272a; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; }
         .gf-advisory-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #60a5fa; margin-bottom: 8px; }
         .gf-chart-container { display: flex; align-items: flex-end; gap: 4px; height: 75px; padding-top: 10px; border-bottom: 1px solid #3f3f46; margin-bottom: 6px; }
+        .gf-chart-bar { flex: 1; background: #2563eb; border-radius: 3px 3px 0 0; min-height: 3px; cursor: pointer; }
+        .gf-chart-bar.lowest-deal { background: #22c55e !important; }
+        .gf-scrollbox-inner { max-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+        .gf-list-item { font-size: 12px; padding: 6px 4px; border-bottom: 1px solid rgba(255,255,255,0.05); }
         .gf-right-container { flex: 1; display: flex; flex-direction: column; min-height: 0; }
         .gf-matrix-tabs { display: flex; width: 100%; border-bottom: 1px solid #27272a; background: #18181b; flex-shrink: 0; }
         .gf-tab-item { flex: 1; text-align: center; padding: 14px 6px; font-size: 13px; font-weight: 600; color: #a1a1aa; cursor: pointer; border-bottom: 2px solid transparent; }
@@ -59,7 +63,7 @@
         .gf-results { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
         .gf-card { background: #1e1e24; border: 1px solid #27272a; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; }
         .gf-summary { display: flex; justify-content: space-between; align-items: center; }
-        .gf-price { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+        .gf-price { font-size: 18px; font-weight: 700; color: #facc15; }
     `;
     document.head.appendChild(style);
 
@@ -107,23 +111,22 @@
                 <div class="gf-input-group"><span class="gf-label">Class</span><select id="gf-filter-class" class="gf-input"><option value="economy">Economy</option><option value="business">Business</option><option value="first">First Class</option></select></div>
                 <button id="gf-submit-search" class="gf-btn">Search</button>
             </div>
-            <div class="gf-row">
-                <div class="gf-input-group"><span class="gf-label">Adults</span><select id="gf-filter-adults" class="gf-input"><option value="1">1 adult</option></select></div>
-                <div class="gf-input-group"><span class="gf-label">Carry-On</span><select id="gf-bag-carry" class="gf-input"><option value="0">None</option></select></div>
-                <div class="gf-input-group"><span class="gf-label">Checked</span><select id="gf-bag-checked" class="gf-input"><option value="0">None</option></select></div>
-            </div>
-            <div class="gf-row">
-                <div class="gf-input-group"><span class="gf-label">Alliance Filter</span><select id="gf-filter-alliance" class="gf-input"><option value="all">All Alliances</option></select></div>
-                <div class="gf-input-group"><span class="gf-label">Airline Filter</span><input type="text" id="gf-filter-airline" class="gf-input"></div>
-                <div class="gf-input-group"><span class="gf-label">Max Duration (hrs)</span><input type="number" id="gf-filter-duration" class="gf-input"></div>
-                <div class="gf-input-group"><span class="gf-label">Stops Max</span><select id="gf-filter-stops" class="gf-input"><option value="all">Any stops</option></select></div>
-                <div class="gf-input-group"><span class="gf-label">Sort By</span><select id="gf-matrix-sort" class="gf-input"><option value="price">Cheapest first</option></select></div>
-                <div class="gf-input-group"><span class="gf-label">Max Fare Limit</span><input type="number" id="gf-filter-price" class="gf-input"></div>
-            </div>
         </div>
         <div class="gf-workspace">
             <div id="gf-left-panel" class="gf-left-advisory">
-                <div class="gf-advisory-section"><div class="gf-advisory-title">Price Trends (Live Spread)</div><div id="gf-trend-summary-text">Submit search.</div><div id="gf-price-chart" class="gf-chart-container"></div><div id="gf-price-insights-box"></div></div>
+                <div class="gf-advisory-section">
+                    <div class="gf-advisory-title">Price Trends (Live Spread)</div>
+                    <div id="gf-trend-summary-text">Submit search to calculate indices.</div>
+                    <div id="gf-price-chart" class="gf-chart-container"></div>
+                </div>
+                <div class="gf-advisory-section">
+                    <div class="gf-advisory-title">Destination Attractions</div>
+                    <div id="gf-attractions-box" class="gf-scrollbox-inner"><div class="gf-list-item">📍 City Center Tour</div></div>
+                </div>
+                <div class="gf-advisory-section">
+                    <div class="gf-advisory-title">Recommended Area Hotels</div>
+                    <div id="gf-hotels-box" class="gf-scrollbox-inner"><div class="gf-list-item">🏨 Airport Resort Premier ($145/nt)</div></div>
+                </div>
             </div>
             <div class="gf-right-container">
                 <div class="gf-matrix-tabs"><div id="gf-tab-best" class="gf-tab-item active">Best flights</div><div id="gf-tab-cheapest" class="gf-tab-item">Cheapest flights</div><div id="gf-tab-other" class="gf-tab-item">Other flights</div></div>
@@ -134,13 +137,14 @@
 
     function processAndRenderFilters() {
         const resultsBox = document.getElementById('gf-results-box');
-        if (compiledItineraries.length === 0) { resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 50px;">No paths found.</div>`; return; }
+        if (compiledItineraries.length === 0) { resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 50px;">No paths found. Check your airport codes.</div>`; return; }
 
         let evaluatedItineraries = [];
         compiledItineraries.forEach(itinerary => {
             let totalTransitMinutes = 0;
             let isSplitTicket = false;
             let currentAirline = null;
+
             itinerary.legs.forEach(leg => {
                 leg.forEach((flight) => {
                     totalTransitMinutes += (flight.duration || 120);
@@ -164,6 +168,11 @@
         let activeTargetGroup = activeResultTab === 'cheapest' ? tabCheapest : (activeResultTab === 'other' ? tabOther : tabBest);
 
         resultsBox.innerHTML = '';
+        if (activeTargetGroup.length === 0) {
+            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 50px;">No flights inside this specific filter tab.</div>`;
+            return;
+        }
+
         activeTargetGroup.forEach(wrapper => {
             const card = document.createElement('div');
             card.className = 'gf-card';
@@ -182,10 +191,18 @@
 
     function generatePermutations(legsArray) {
         if (legsArray.length === 0) return [];
-        if (legsArray.length === 1) return legsArray[0].map(i => ({ legs: [i.route.filter(l => l.transportType === 'FLIGHT')], totalCost: i.route.reduce((a, f) => a + (f.price || 0), 0) }));
+        // Fixed compilation: wrap direct routes properly if sub-segments don't exist
+        if (legsArray.length === 1) {
+            return legsArray[0].map(i => {
+                const flights = i.route ? i.route.filter(l => l.transportType === 'FLIGHT') : [];
+                const cost = i.route ? i.route.reduce((a, f) => a + (f.price || 0), 0) : 0;
+                return { legs: [flights], totalCost: cost };
+            });
+        }
         const sub = generatePermutations(legsArray.slice(1)), current = legsArray[0], combined = [];
         current.forEach(c => {
-            const cFl = c.route.filter(l => l.transportType === 'FLIGHT'), cCost = c.route.reduce((a, f) => a + (f.price || 0), 0);
+            const cFl = c.route ? c.route.filter(l => l.transportType === 'FLIGHT') : [];
+            const cCost = c.route ? c.route.reduce((a, f) => a + (f.price || 0), 0) : 0;
             sub.forEach(s => combined.push({ legs: [cFl, ...s.legs], totalCost: cCost + s.totalCost }));
         });
         return combined;
@@ -194,10 +211,11 @@
     async function executeFlightSearch() {
         const resultsBox = document.getElementById('gf-results-box');
         resultsBox.innerHTML = `<div style="color: #60a5fa; text-align: center; margin-top: 100px;">Querying simulated networks...</div>`;
+        compiledItineraries = [];
         
         let fromId = lookupAirportId(document.querySelector('.gf-loc-from').value);
         let toId = lookupAirportId(document.querySelector('.gf-loc-to').value);
-        if (!fromId || !toId) return;
+        if (!fromId || !toId) { resultsBox.innerHTML = `<div style="color: #fb923c; text-align: center; margin-top: 50px;">Could not resolve Airport Unique IDs.</div>`; return; }
 
         let responseData = [];
         try {
@@ -205,7 +223,8 @@
             if (directRes.ok) responseData = await directRes.json();
         } catch (e) {}
 
-        if (responseData.length === 0) {
+        // If direct flight data array is empty, fire the Multi-Hub Bridging Engine
+        if (!responseData || responseData.length === 0) {
             const hubQueries = GLOBAL_ROUTING_HUBS.map(hub => {
                 const hId = lookupAirportId(hub);
                 return Promise.all([
@@ -213,13 +232,20 @@
                     fetch(`/search-route/${hId}/${toId}`).then(r => r.ok ? r.json() : [])
                 ]);
             });
+            
             const hubResults = await Promise.all(hubQueries);
             hubResults.forEach(([a, b]) => {
-                if (a && b) a.forEach(itA => b.forEach(itB => responseData.push({ route: [...itA.route, ...itB.route] })));
+                if (a && b && a.length > 0 && b.length > 0) {
+                    a.forEach(itA => b.forEach(itB => responseData.push({ route: [...itA.route, ...itB.route] })));
+                }
             });
         }
 
-        compiledItineraries = generatePermutations([responseData]);
+        if (!responseData || responseData.length === 0) {
+            compiledItineraries = [];
+        } else {
+            compiledItineraries = generatePermutations([responseData]);
+        }
         processAndRenderFilters();
     }
 
