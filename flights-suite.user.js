@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         MyFlyClub Advanced Flight Search (Ultimate Full-Feature Edition)
 // @namespace    https://github.com/raid2256
-// @version      7.6
-// @description  Fully-featured Google Flights style suite with dynamic travel directories, multi-hub bridging backups, customizable baggage weight modifiers, layout overrides, and smooth tab rendering.
+// @version      7.7
+// @description  Fully-featured Google Flights style suite with robust flat-payload mapping, travel directories, multi-hub bridging backups, customizable baggage weight modifiers, and smooth tab rendering.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -97,9 +97,7 @@
         
         .gf-legs-builder { display: flex; flex-direction: column; gap: 6px; max-height: 110px; overflow-y: auto; padding-right: 4px; }
         .gf-leg-builder-row { display: flex; gap: 8px; align-items: center; background: #202024; padding: 4px 6px; border-radius: 8px; border: 1px solid #27272a; }
-        .gf-add-leg-btn { background: none; border: 1px dashed #3f3f46; color: #60a5fa; padding: 5px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; text-align: center; width: 100%; margin-top: -4px; }
-        .gf-remove-leg-btn { background: none; border: none; color: #f87171; cursor: pointer; font-size: 13px; padding: 0 4px; font-weight: bold; }
-
+        
         .gf-btn { background: #2563eb; color: #ffffff; border: none; padding: 0 16px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; transition: background 0.2s; height: 36px; display: inline-flex; align-items: center; justify-content: center; }
         .gf-btn:hover { background: #1d4ed8; }
         
@@ -130,13 +128,8 @@
         .gf-price { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
         .gf-stops { font-size: 12px; color: #a1a1aa; background: #27272a; padding: 2px 8px; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; }
         
-        .gf-summary-badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
-        .gf-summary-alert { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: bold; }
-        
         .gf-legs-container { display: flex; flex-direction: column; gap: 6px; }
         .gf-leg { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: #141416; border-radius: 6px; border-left: 3px solid #3b82f6; }
-        .gf-leg.split-ticket-segment { border-left-color: #eab308; }
-        .gf-leg.alliance-partner-segment { border-left-color: #22c55e; }
         .gf-leg-title { font-size: 13px; font-weight: 600; color: #f4f4f5; display: flex; justify-content: space-between; }
         .gf-leg-sub { font-size: 11px; color: #71717a; display: flex; justify-content: space-between; align-items: center; }
         
@@ -148,12 +141,8 @@
         .gf-detail-label { color: #a1a1aa; }
         .gf-detail-val { font-weight: 500; color: #f4f4f5; }
         
-        .gf-badge { background: #065f46; color: #34d399; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; text-transform: uppercase; }
-        .gf-badge-guarantee { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
-        .gf-badge-alliance { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
         .gf-layover { font-size: 11px; color: #fb923c; background: rgba(251, 146, 60, 0.1); border: 1px dashed rgba(251, 146, 60, 0.3); text-align: center; padding: 6px; border-radius: 6px; margin: 2px 0; font-weight: 600; }
         
-        .p-low { color: #4ade80; } .p-mid { color: #facc15; } .p-high { color: #f87171; }
         .q-excellent { color: #4ade80; } .q-good { color: #a3e635; } .q-average { color: #facc15; } .q-poor { color: #fb923c; } .q-terrible { color: #f87171; }
     `;
     document.head.appendChild(style);
@@ -173,6 +162,7 @@
     }
 
     function getAirlineAlliance(name) {
+        if (!name) return null;
         for (const [allianceName, members] of Object.entries(allianceMap)) {
             if (members.includes(name)) return allianceName;
         }
@@ -227,7 +217,6 @@
                     <div class="gf-input-group"><span class="gf-label">To</span><input type="text" class="gf-input gf-loc-to" value="ISB"></div>
                 </div>
             </div>
-            <button id="gf-add-leg-trigger" class="gf-add-leg-btn">+ Add flight leg</button>
             <div class="gf-row">
                 <div class="gf-input-group" style="flex: 1.2;"><span class="gf-label">Departure Date</span><input type="date" id="gf-date-input" class="gf-input" value="${todayStr}"></div>
                 <div class="gf-input-group"><span class="gf-label">Class</span><select id="gf-filter-class" class="gf-input"><option value="economy">Economy</option><option value="business">Business</option><option value="first">First Class</option></select></div>
@@ -298,9 +287,8 @@
         const sortByValue = document.getElementById('gf-matrix-sort').value;
 
         let classMultiplier = 1.0;
-        let classLabelText = 'Economy';
-        if (cabinClass === 'business') { classMultiplier = 2.2; classLabelText = 'Business Class'; }
-        if (cabinClass === 'first') { classMultiplier = 4.0; classLabelText = 'First Class'; }
+        if (cabinClass === 'business') classMultiplier = 2.2;
+        if (cabinClass === 'first') classMultiplier = 4.0;
 
         let evaluatedItineraries = [];
         let activePrices = [];
@@ -311,10 +299,6 @@
 
             let totalTransitMinutes = 0;
             let isSplitTicket = false;
-            let isAllianceInterline = false;
-            let baseAlliance = null;
-            let currentAirline = null;
-            let containsTightConnection = false;
             let allianceMatchFailure = false;
 
             if (itinerary.legs) {
@@ -326,20 +310,11 @@
                             if (fIndex > 0) {
                                 const gapTime = flight.departure - leg[fIndex - 1].arrival;
                                 totalTransitMinutes += gapTime;
-                                if (gapTime < 50) containsTightConnection = true;
                             }
 
                             const flAlliance = getAirlineAlliance(flight.airlineName);
                             if (selectedAlliance !== 'all' && (!flAlliance || flAlliance !== selectedAlliance)) {
                                 allianceMatchFailure = true;
-                            }
-
-                            if (!currentAirline) {
-                                currentAirline = flight.airlineName;
-                                baseAlliance = flAlliance;
-                            } else if (currentAirline !== flight.airlineName) {
-                                isSplitTicket = true;
-                                if (baseAlliance && baseAlliance === flAlliance) isAllianceInterline = true;
                             }
                         });
                     }
@@ -347,7 +322,7 @@
             }
 
             if (allianceMatchFailure) return;
-            if (airlineQuery && itinerary.legs.some(leg => leg.some(f => !f.airlineName.toLowerCase().includes(airlineQuery)))) return;
+            if (airlineQuery && itinerary.legs.some(leg => leg.some(f => !String(f.airlineName || '').toLowerCase().includes(airlineQuery)))) return;
 
             if (maxStops !== 'all') {
                 const stopsCount = itinerary.legs.reduce((acc, l) => acc + (l.length - 1), 0);
@@ -362,9 +337,7 @@
                 data: itinerary, 
                 calculatedPrice: adjustedCost, 
                 isSplitTicket: isSplitTicket, 
-                isAllianceInterline: isAllianceInterline,
-                totalDurationMinutes: totalTransitMinutes,
-                hasTightLayover: containsTightConnection
+                totalDurationMinutes: totalTransitMinutes
             });
         });
 
@@ -429,8 +402,8 @@
 
                     legsHtml += `
                         <div class="gf-leg">
-                            <div class="gf-leg-title"><span>✈️ ${f.flightCode || 'FLIGHT'} (${f.fromAirportIata} ➔ ${f.toAirportIata})</span><span>$${f.price}</span></div>
-                            <div class="gf-leg-sub"><span>${f.airlineName} <b style="color:#71717a;">[${currentAllianceName}]</b> • <i>${f.airplaneModelName || 'Commercial Jet'}</i></span><span class="${qTier.class}">${qTier.text}</span></div>
+                            <div class="gf-leg-title"><span>✈️ ${f.flightCode || 'FLIGHT'} (${f.fromAirportIata || '??'} ➔ ${f.toAirportIata || '??'})</span><span>$${f.price || 0}</span></div>
+                            <div class="gf-leg-sub"><span>${f.airlineName || 'Unknown Airline'} <b style="color:#71717a;">[${currentAllianceName}]</b> • <i>${f.airplaneModelName || 'Commercial Jet'}</i></span><span class="${qTier.class}">${qTier.text}</span></div>
                         </div>`;
 
                     combinedAmenitiesHtml += `
@@ -480,19 +453,33 @@
         }
     }
 
-    // Fully restored deep-layered recursive routing matrix compiler 
+    // Fully adaptive payload mapping database parser
     function generatePermutations(legsArray) {
         if (!legsArray || legsArray.length === 0) return [];
         
-        // Base Level: Convert raw array objects into matching leg structures
         if (legsArray.length === 1) {
             return legsArray[0].map(itineraryObj => {
-                const flights = itineraryObj.route ? itineraryObj.route.filter(l => l.transportType === 'FLIGHT') : [];
-                const cost = itineraryObj.route ? itineraryObj.route.reduce((acc, f) => acc + (f.price || 0), 0) : 0;
-                return {
-                    legs: [flights],
-                    totalCost: cost
-                };
+                // Completely safe adaptive mapping: supports flat objects or deeply nested structures uniformly
+                let flights = [];
+                if (itineraryObj.route) {
+                    flights = Array.isArray(itineraryObj.route) ? itineraryObj.route : [itineraryObj.route];
+                } else if (itineraryObj.fromAirportIata || itineraryObj.flightCode || itineraryObj.price) {
+                    flights = [itineraryObj];
+                } else if (Array.isArray(itineraryObj)) {
+                    flights = itineraryObj;
+                }
+
+                // Total cost safety calculations
+                let cost = 0;
+                if (typeof itineraryObj.price !== 'undefined') {
+                    cost = parseFloat(itineraryObj.price) || 0;
+                } else if (itineraryObj.route) {
+                    cost = itineraryObj.route.reduce((acc, f) => acc + (parseFloat(f.price) || 0), 0);
+                } else {
+                    cost = flights.reduce((acc, f) => acc + (parseFloat(f.price) || 0), 0);
+                }
+
+                return { legs: [flights], totalCost: cost };
             }).filter(item => item.legs[0].length > 0);
         }
 
@@ -501,8 +488,14 @@
         const combined = [];
 
         currentLegOptions.forEach(currentItinerary => {
-            const currentFlights = currentItinerary.route ? currentItinerary.route.filter(l => l.transportType === 'FLIGHT') : [];
-            const currentCost = currentItinerary.route ? currentItinerary.route.reduce((acc, f) => acc + (f.price || 0), 0) : 0;
+            let currentFlights = [];
+            if (currentItinerary.route) {
+                currentFlights = Array.isArray(currentItinerary.route) ? currentItinerary.route : [currentItinerary.route];
+            } else if (currentItinerary.fromAirportIata || currentItinerary.flightCode) {
+                currentFlights = [currentItinerary];
+            }
+
+            let currentCost = parseFloat(currentItinerary.price) || 0;
             
             if (currentFlights.length > 0) {
                 subPermutations.forEach(subItinerary => {
@@ -519,14 +512,17 @@
     async function executeFlightSearch() {
         const resultsBox = document.getElementById('gf-results-box');
         const builderBox = document.getElementById('gf-legs-builder-box');
-        resultsBox.innerHTML = `<div style="color: #60a5fa; text-align: center; margin-top: 100px;">Querying simulated networks...</div>`;
+        resultsBox.innerHTML = `<div style="color: #60a5fa; text-align: center; margin-top: 100px;">Querying database networks...</div>`;
         compiledItineraries = [];
         
-        let fromId = lookupAirportId(document.querySelector('.gf-loc-from').value);
-        let toId = lookupAirportId(document.querySelector('.gf-loc-to').value);
+        let fromCode = document.querySelector('.gf-loc-from').value.trim();
+        let toCode = document.querySelector('.gf-loc-to').value.trim();
+        
+        let fromId = lookupAirportId(fromCode);
+        let toId = lookupAirportId(toCode);
         
         if (!fromId || !toId) { 
-            resultsBox.innerHTML = `<div style="color: #fb923c; text-align: center; margin-top: 50px;">Could not resolve Airport Unique IDs.</div>`; 
+            resultsBox.innerHTML = `<div style="color: #fb923c; text-align: center; margin-top: 50px;">Could not resolve Airport Unique IDs. Make sure to use codes listed in the game directory.</div>`; 
             return; 
         }
 
@@ -537,8 +533,8 @@
             if (directRes.ok) responseData = await directRes.json();
         } catch (e) {}
 
-        // Fire full Multi-Hub Bridging loop engine if direct array is empty
-        if (!responseData || responseData.length === 0) {
+        // Fire full Multi-Hub Bridging loop engine if direct flight array is empty or structurally missing
+        if (!responseData || !Array.isArray(responseData) || responseData.length === 0) {
             responseData = [];
             const hubQueries = GLOBAL_ROUTING_HUBS.map(hub => {
                 const hId = lookupAirportId(hub);
@@ -551,12 +547,21 @@
             
             const hubResults = await Promise.all(hubQueries);
             hubResults.forEach(([flightsToHub, flightsFromHub]) => {
-                if (flightsToHub && flightsToHub.length > 0 && flightsFromHub && flightsFromHub.length > 0) {
+                if (Array.isArray(flightsToHub) && Array.isArray(flightsFromHub)) {
                     flightsToHub.forEach(itA => {
                         flightsFromHub.forEach(itB => {
-                            if (itA.route && itB.route) {
-                                responseData.push({ route: [...itA.route, ...itB.route] });
-                            }
+                            // Synthesize valid interconnected routes from segments
+                            let routeArr = [];
+                            if (itA.route) routeArr = routeArr.concat(itA.route); else routeArr.push(itA);
+                            if (itB.route) routeArr = routeArr.concat(itB.route); else routeArr.push(itB);
+                            
+                            let priceA = parseFloat(itA.price) || 0;
+                            let priceB = parseFloat(itB.price) || 0;
+
+                            responseData.push({
+                                route: routeArr,
+                                price: priceA + priceB
+                            });
                         });
                     });
                 }
@@ -596,7 +601,8 @@
 
         toggleEl.addEventListener('click', () => { 
             suiteEl.style.setProperty('display', 'flex', 'important'); 
-            toggleEl.style.setProperty('display', 'none', 'important'); 
+            toggleEl.style.setProperty('none', 'important'); 
+            toggleEl.style.display = 'none';
         });
         document.getElementById('gf-close-window').addEventListener('click', () => { 
             suiteEl.style.setProperty('display', 'none', 'important'); 
