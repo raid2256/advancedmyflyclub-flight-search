@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Dynamic Multi-Leg Edition)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Intelligence Edition)
 // @namespace    https://github.com/raid2256
-// @version      8.2
-// @description  Advanced Google Flights style suite with absolute dynamic airport resolution, split-ticket calculations, self-transfer warnings, and multi-leg matrix panels.
+// @version      9.0
+// @description  Google Flights style suite upgraded with custom Competitor Saturation Trackers and dynamic Alliance Interlining Surcharge algorithms.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -16,6 +16,20 @@
     const todayStr = new Date().toISOString().split('T')[0];
     let compiledItineraries = [];
     let activeResultTab = 'best'; 
+
+    // Alliance map for interlining calculations
+    const allianceMap = {
+        "Animals": ["Fox and Friends", "Cats", "The Panda", "Shiba", "Narwhal", "Dragon", "Goblins"],
+        "Come To Brasil": ["Logic Air", "CityJet", "Global Connect", "Global Express", "Gondor Air", "Mordor Air", "Chungking Express"],
+        "Continental Connect": ["Agram Air", "SkyHigh", "Agram EU", "Majestic Air", "Purdue Airlines", "Majestic Connect", "Bharat Air"],
+        "AntiPoverty Coalition": ["Chanteclair Ailes", "Nantas", "You can't afford this", "Nantaz", "Oiligarch Transport Services", "EuroElites"],
+        "Magic Flight": ["Folklore", "Nineteen Eighty-nine", "Fearless", "America Commuter", "Delta", "PhompAng", "EuroFly"],
+        "Value Alliance": ["Equora", "Avelo", "Condor", "Aerlia", "Ice Cream Airlines", "Marabu Airlines"],
+        "AeroAmerica": ["Royal Malay", "Drakensberg Air", "NorthSky Airlines", "Volaris", "FlyNorth", "Stratus Air", "Grey Wolf Airlines"],
+        "Hello World": ["Kia Ora Air", "Aloha Air", "RyanAir Group", "Apollo Air", "Banyan Airways", "Orange Airlines", "West Airlines"],
+        "Artisan Alliance": ["Artisan Air", "Lei Lines", "Daybreak Airways", "Sun River Airways", "Aero America", "Air Loom", "Sky Airways"],
+        "United Skies": ["Dirt Cheap Airlines", "ALPHA", "Orion Airways", "VANGUARD", "Dobrolyot", "Orbis", "Freedom Express"]
+    };
 
     const style = document.createElement('style');
     style.id = 'g-flights-styles';
@@ -96,6 +110,10 @@
         .gf-badge { background: #065f46; color: #34d399; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; text-transform: uppercase; }
         .gf-badge-guarantee { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
         .gf-badge-selftransfer { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+        .gf-badge-competition { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; text-transform: uppercase; border: 1px solid transparent; }
+        .gf-comp-high { background: rgba(239, 68, 68, 0.15); color: #ef4444; border-color: rgba(239, 68, 68, 0.4); }
+        .gf-comp-mid { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border-color: rgba(245, 158, 11, 0.4); }
+        .gf-comp-low { background: rgba(34, 197, 94, 0.15); color: #22c55e; border-color: rgba(34, 197, 94, 0.4); }
         
         .gf-layover { font-size: 11px; color: #fb923c; background: rgba(251, 146, 60, 0.1); border: 1px dashed rgba(251, 146, 60, 0.3); text-align: center; padding: 6px; border-radius: 6px; margin: 2px 0; font-weight: 600; }
         .gf-layover.tight-warning { color: #f87171; background: rgba(248, 113, 113, 0.1); border-color: rgba(248, 113, 113, 0.4); }
@@ -129,7 +147,14 @@
         return { text: `Terrible (${score/10}/10)`, class: 'q-terrible' };
     }
 
-    // Comprehensive Airport Resolver Engine
+    function getAirlineAlliance(name) {
+        if (!name) return null;
+        for (const [allianceName, members] of Object.entries(allianceMap)) {
+            if (members.includes(name)) return allianceName;
+        }
+        return null;
+    }
+
     function lookupAirportId(iata) {
         const cleanIata = String(iata).trim().toUpperCase();
         if (!isNaN(cleanIata) && cleanIata.length > 0) return parseInt(cleanIata); 
@@ -463,7 +488,31 @@
         let evaluatedItineraries = [];
 
         compiledItineraries.forEach(itinerary => {
-            const adjustedCost = Math.round((itinerary.totalCost * classMultiplier + baggageSurchargeTotal) * passengerCount);
+            // --- Feature 2: Alliance Interlining Surcharge Analysis ---
+            let interlineFeesTotal = 0;
+            let currentLegAllianceHtml = [];
+
+            itinerary.legs.forEach(leg => {
+                for (let i = 0; i < leg.length; i++) {
+                    if (i > 0) {
+                        const carrierA = leg[i - 1].airlineName;
+                        const carrierB = leg[i].airlineName;
+
+                        if (carrierA !== carrierB) {
+                            const allianceA = getAirlineAlliance(carrierA);
+                            const allianceB = getAirlineAlliance(carrierB);
+
+                            if (allianceA && allianceB && allianceA === allianceB) {
+                                interlineFeesTotal += 15 * passengerCount;
+                            } else {
+                                interlineFeesTotal += 50 * passengerCount;
+                            }
+                        }
+                    }
+                }
+            });
+
+            const adjustedCost = Math.round(((itinerary.totalCost * classMultiplier) + baggageSurchargeTotal) * passengerCount + interlineFeesTotal);
             if (adjustedCost > maxPrice) return;
             
             if (maxStops === 'overnight') {
@@ -497,7 +546,7 @@
             });
 
             activePrices.push(adjustedCost);
-            evaluatedItineraries.push({ data: itinerary, calculatedPrice: adjustedCost, isSplitTicket: isSplitTicket });
+            evaluatedItineraries.push({ data: itinerary, calculatedPrice: adjustedCost, isSplitTicket: isSplitTicket, totalInterlineFees: interlineFeesTotal });
         });
 
         if (evaluatedItineraries.length === 0) {
@@ -574,6 +623,34 @@
             if (finalCalculatedCost <= guaranteeBoundary) badgesHtml += `<span class="gf-badge-guarantee">🛡️ Price Guarantee</span>`;
             if (wrapper.isSplitTicket) badgesHtml += `<span class="gf-badge-selftransfer">⚠️ Multi-Ticket Split</span>`;
 
+            // --- Feature 1: Competitor Capacity and Load Factor Integration ---
+            let loadFactorSum = 0;
+            let flightSegmentCount = 0;
+
+            itinerary.legs.forEach(leg => {
+                leg.forEach(flight => {
+                    if (flight.loadFactor !== undefined) {
+                        loadFactorSum += flight.loadFactor;
+                        flightSegmentCount++;
+                    }
+                });
+            });
+
+            let competitionBadgeHtml = '';
+            if (flightSegmentCount > 0) {
+                const avgLoadFactor = loadFactorSum / flightSegmentCount;
+                if (avgLoadFactor > 80) {
+                    competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-high">🔴 High Competition</span>`;
+                } else if (avgLoadFactor >= 50) {
+                    competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-mid">🟡 Medium Competition</span>`;
+                } else {
+                    competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-low">🟢 Low Competition</span>`;
+                }
+            } else {
+                competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-low">🟢 Low Competition</span>`;
+            }
+            badgesHtml += competitionBadgeHtml;
+
             itinerary.legs.forEach((legFlights, index) => {
                 totalStopsCount += (legFlights.length - 1);
                 legsHtml += `<div style="font-size: 11px; text-transform: uppercase; color: #3b82f6; font-weight: bold; margin-top: 6px;">Leg ${index + 1}</div>`;
@@ -616,7 +693,10 @@
                     if (rawFeatures.includes('IFE') || (qScore >= 70 && durationMins >= 180)) calculatedIfe = "On-demand seatback video monitors";
                     if (rawFeatures.includes('POWER_OUTLET') || qScore >= 70 || cabinClass !== 'economy') calculatedPower = "In-seat AC power outlets";
 
+                    const allianceName = getAirlineAlliance(flight.airlineName) || "Independent Carrier";
+
                     const amenitiesList = [
+                        { label: "Alliance Profile", val: allianceName },
                         { label: "Cabin Class", val: classLabelText },
                         { label: "Legroom", val: cabinClass === 'economy' ? (qScore > 70 ? 'Above-average (81 cm)' : 'Standard (78 cm)') : 'Premium First/Biz Suite' },
                         { label: "Wi-Fi", val: calculatedWifi },
@@ -663,6 +743,7 @@
                 <div class="gf-details">
                     ${combinedAmenitiesHtml}
                     <div class="gf-detail-section" style="border-top: 1px solid #3f3f46; margin-top: 4px; padding-top: 6px;">
+                        <div class="gf-detail-row"><span class="gf-detail-label">Alliance Interline Fees:</span><span class="gf-detail-val" style="color:#c084fc;">+$${wrapper.totalInterlineFees}</span></div>
                         <div class="gf-detail-row"><span class="gf-detail-label">Emissions estimate:</span><span class="gf-detail-val" style="color:#facc15;">${emissionsTotal} kg CO2e</span></div>
                     </div>
                 </div>
