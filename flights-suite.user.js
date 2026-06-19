@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MyFlyClub Advanced Flight Search (Native Schema Integration)
 // @namespace    https://github.com/raid2256
-// @version      8.0
+// @version      8.1
 // @description  Advanced Google Flights style suite matching native client payload parsing, dynamic travel directories, live price insights, and detailed leg breakdowns.
 // @match        *://*.myfly.club/*
 // @grant        none
@@ -14,7 +14,7 @@
     if (document.getElementById('gf-toggle-handle')) document.getElementById('gf-toggle-handle').remove();
 
     const todayStr = new Date().toISOString().split('T')[0];
-    let compiledItineraries = []; // Holds native entry structures directly from server
+    let compiledItineraries = []; 
     let activeResultTab = 'best'; 
 
     const HUB_ID_DIRECTORY = { 
@@ -262,4 +262,310 @@
                 </div>
                 <div class="gf-advisory-section">
                     <div class="gf-advisory-title">Recommended Area Hotels</div>
-                    <div id="gf-hotels-box" class="gf-scrollbox
+                    <div id="gf-hotels-box" class="gf-scrollbox-inner"></div>
+                </div>
+            </div>
+            <div class="gf-right-container">
+                <div class="gf-matrix-tabs"><div id="gf-tab-best" class="gf-tab-item active">Best flights</div><div id="gf-tab-cheapest" class="gf-tab-item">Cheapest flights</div><div id="gf-tab-other" class="gf-tab-item">Other flights</div></div>
+                <div id="gf-results-box" class="gf-results"><div style="color: #71717a; text-align: center; margin-top: 150px;">Configure parameters above and hit Search.</div></div>
+            </div>
+        </div>
+    `;
+
+    function processAndRenderFilters() {
+        const resultsBox = document.getElementById('gf-results-box');
+        if (!compiledItineraries || compiledItineraries.length === 0) { 
+            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 50px;">No paths found. Check your airport codes.</div>`; 
+            return; 
+        }
+
+        const selectedAlliance = document.getElementById('gf-filter-alliance').value;
+        const airlineQuery = document.getElementById('gf-filter-airline').value.toLowerCase();
+        const maxStops = document.getElementById('gf-filter-stops').value;
+        const maxPrice = parseFloat(document.getElementById('gf-filter-price').value) || Infinity;
+        const maxDurationHrs = parseFloat(document.getElementById('gf-filter-duration').value) || Infinity;
+        
+        const cabinClass = document.getElementById('gf-filter-class').value;
+        const adultsCount = parseInt(document.getElementById('gf-filter-adults').value) || 1;
+        const childrenCount = parseInt(document.getElementById('gf-filter-children').value) || 0;
+        const passengerCount = adultsCount + childrenCount;
+        
+        const carryOnBags = parseInt(document.getElementById('gf-bag-carry').value) || 0;
+        const checkedBags = parseInt(document.getElementById('gf-bag-checked').value) || 0;
+        const baggageSurchargeTotal = (carryOnBags * 25) + (checkedBags * 40);
+
+        const selectedDate = document.getElementById('gf-date-input').value;
+        const sortByValue = document.getElementById('gf-matrix-sort').value;
+
+        let classMultiplier = 1.0;
+        if (cabinClass === 'business') classMultiplier = 2.2;
+        if (cabinClass === 'first') classMultiplier = 4.0;
+
+        let evaluatedItineraries = [];
+        let activePrices = [];
+
+        compiledItineraries.forEach(entry => {
+            if (!entry.route) return;
+
+            const flightLinks = entry.route.filter(link => link.transportType === 'FLIGHT');
+            if (flightLinks.length === 0) return;
+
+            const startLink = flightLinks[0];
+            const endLink = flightLinks[flightLinks.length - 1];
+            const startDay = Math.floor(startLink.departure / (24 * 60));
+
+            const baseCost = entry.route.reduce((acc, link) => acc + (link.price || 0), 0);
+            const adjustedCost = Math.round((baseCost * classMultiplier + baggageSurchargeTotal) * passengerCount);
+            
+            if (adjustedCost > maxPrice) return;
+
+            let allianceMatchFailure = false;
+            flightLinks.forEach(flight => {
+                const flAlliance = getAirlineAlliance(flight.airlineName);
+                if (selectedAlliance !== 'all' && (!flAlliance || flAlliance !== selectedAlliance)) {
+                    allianceMatchFailure = true;
+                }
+            });
+            if (allianceMatchFailure) return;
+
+            if (airlineQuery && !flightLinks.some(f => String(f.airlineName || '').toLowerCase().includes(airlineQuery))) return;
+
+            const totalStops = flightLinks.length - 1;
+            if (maxStops !== 'all' && totalStops > parseInt(maxStops)) return;
+
+            const totalDurationMinutes = endLink.arrival - startLink.departure;
+            if ((totalDurationMinutes / 60) > maxDurationHrs) return;
+
+            activePrices.push(adjustedCost);
+            evaluatedItineraries.push({ 
+                entry: entry,
+                flightLinks: flightLinks,
+                startLink: startLink,
+                endLink: endLink,
+                startDay: startDay,
+                calculatedPrice: adjustedCost, 
+                totalDurationMinutes: totalDurationMinutes,
+                totalStops: totalStops
+            });
+        });
+
+        if (evaluatedItineraries.length === 0) {
+            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 50px;">No itineraries match your active parameters.</div>`;
+            return;
+        }
+
+        if (sortByValue === 'price') {
+            evaluatedItineraries.sort((a, b) => a.calculatedPrice - b.calculatedPrice);
+        } else {
+            evaluatedItineraries.sort((a, b) => (b.flightLinks[0]?.computedQuality || 0) - (a.flightLinks[0]?.computedQuality || 0));
+        }
+
+        let tabBest = [], tabCheapest = [], tabOther = [];
+        const costCapCheapest = Math.min(...activePrices) * 1.15;
+
+        evaluatedItineraries.forEach(item => {
+            if (item.calculatedPrice <= costCapCheapest && tabCheapest.length < 5) tabCheapest.push(item);
+            if (item.totalStops === 0 && tabBest.length < 3) tabBest.push(item);
+            else tabOther.push(item);
+        });
+
+        if (tabBest.length === 0) tabBest = evaluatedItineraries.slice(0, 3);
+        let activeTargetGroup = activeResultTab === 'cheapest' ? tabCheapest : (activeResultTab === 'other' ? tabOther : tabBest);
+
+        resultsBox.innerHTML = '';
+        if (activeTargetGroup.length === 0) {
+            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 50px;">No flights inside this segment category.</div>`;
+            return;
+        }
+
+        activeTargetGroup.forEach(wrapper => {
+            const card = document.createElement('div');
+            card.className = 'gf-card';
+            
+            card.addEventListener('click', (e) => {
+                if (e.target.closest('.gf-details')) return;
+                const drawer = card.querySelector('.gf-details');
+                if (drawer) drawer.classList.toggle('active');
+            });
+
+            let legsHtml = '';
+            let combinedAmenitiesHtml = '';
+            let emissionsTotal = 0;
+
+            wrapper.flightLinks.forEach((link, idx) => {
+                const qTier = getQualityTier(link.computedQuality || 60);
+                const currentAllianceName = getAirlineAlliance(link.airlineName) || "Independent Carrier";
+                emissionsTotal += Math.round((link.arrival - link.departure) * 4.2 * passengerCount);
+
+                if (idx > 0) {
+                    const prevFlight = wrapper.flightLinks[idx - 1];
+                    const layoverTime = link.departure - prevFlight.arrival;
+                    legsHtml += `<div class="gf-layover">⏱️ +${getDurationText(layoverTime)} layover at ${link.fromAirportIata}</div>`;
+                }
+
+                legsHtml += `
+                    <div class="gf-leg">
+                        <div class="gf-leg-title">
+                            <span>✈️ ${link.flightCode || 'FLIGHT'} (${link.fromAirportIata} ➔ ${link.toAirportIata})</span>
+                            <span>$${Math.round(link.price * classMultiplier)}</span>
+                        </div>
+                        <div class="gf-leg-sub">
+                            <span>${link.airlineName} <b style="color:#71717a;">[${currentAllianceName}]</b> • <i>${link.airplaneModelName || 'Commercial Jet'}</i></span>
+                            <span class="${qTier.class}">${qTier.text}</span>
+                        </div>
+                    </div>`;
+
+                combinedAmenitiesHtml += `
+                    <div class="gf-detail-section">
+                        <div style="font-weight:bold; color:#60a5fa; font-size:12px;">Segment ${link.flightCode || 'FLIGHT'} Details</div>
+                        <div class="gf-detail-row"><span class="gf-detail-label">Schedule:</span><span class="gf-detail-val">${getAirlineTimeSlotText(link.departure, wrapper.startDay)} - ${getAirlineTimeSlotText(link.arrival, wrapper.startDay)}</span></div>
+                        <div class="gf-detail-row"><span class="gf-detail-label">Infrastructure Rating:</span><span class="gf-detail-val">${link.computedQuality ? (link.computedQuality/10) + '/10 quality mark' : 'Standard Tier'}</span></div>
+                    </div>`;
+            });
+
+            let stopDescription = wrapper.totalStops === 0 ? "Direct Flight" : (wrapper.totalStops === 1 ? "1 Stop" : `${wrapper.totalStops} Stops`);
+
+            card.innerHTML = `
+                <div class="gf-summary">
+                    <span class="gf-price">$${wrapper.calculatedPrice}</span>
+                    <span style="font-size:11px; color:#a1a1aa;">⏱️ ${getDurationText(wrapper.totalDurationMinutes)}</span>
+                    <span class="gf-stops">${stopDescription}</span>
+                </div>
+                <div class="gf-legs-container">${legsHtml}</div>
+                <div class="gf-details">
+                    ${combinedAmenitiesHtml}
+                    <div class="gf-detail-section" style="border-top:1px solid #3f3f46; padding-top:6px;">
+                        <div class="gf-detail-row"><span class="gf-detail-label">Emissions estimate:</span><span class="gf-detail-val" style="color:#facc15;">${emissionsTotal} kg CO2e</span></div>
+                    </div>
+                </div>
+            `;
+            resultsBox.appendChild(card);
+        });
+
+        const chartBox = document.getElementById('gf-price-chart');
+        const summaryText = document.getElementById('gf-trend-summary-text');
+        const insightsBox = document.getElementById('gf-price-insights-box');
+        chartBox.innerHTML = '';
+        insightsBox.innerHTML = '';
+
+        if (activePrices.length > 0) {
+            const minP = Math.min(...activePrices), maxP = Math.max(...activePrices);
+            summaryText.innerText = `Prices spread from $${minP} to $${maxP}.`;
+            insightsBox.innerHTML = `<span style="color:#4ade80;">🟢 Metrics Loaded:</span> Displaying native server connection tracks.`;
+            
+            for (let i = 0; i < 14; i++) {
+                const bar = document.createElement('div');
+                bar.className = 'gf-chart-bar';
+                bar.style.height = `${Math.floor(Math.random() * 65) + 12}%`;
+                if (i === 1) bar.className += ' lowest-deal';
+                chartBox.appendChild(bar);
+            }
+        }
+    }
+
+    async function executeFlightSearch() {
+        const resultsBox = document.getElementById('gf-results-box');
+        resultsBox.innerHTML = `<div style="color: #60a5fa; text-align: center; margin-top: 100px;">Querying database networks...</div>`;
+        compiledItineraries = [];
+        
+        let fromCode = document.querySelector('.gf-loc-from').value.trim();
+        let toCode = document.querySelector('.gf-loc-to').value.trim();
+        
+        let fromId = lookupAirportId(fromCode);
+        let toId = lookupAirportId(toCode);
+        
+        if (!fromId || !toId) { 
+            resultsBox.innerHTML = `<div style="color: #fb923c; text-align: center; margin-top: 50px;">Could not resolve Airport Unique IDs. Ensure code is accurate.</div>`; 
+            return; 
+        }
+
+        try {
+            const res = await fetch(`/search-route/${fromId}/${toId}`);
+            if (res.ok) {
+                compiledItineraries = await res.json();
+            }
+        } catch (e) {
+            console.error("Network interface error:", e);
+        }
+
+        processAndRenderFilters();
+        updateTravelGuidePanels(toCode);
+    }
+
+    function dragMove(e) { 
+        if (isDragging) { 
+            appContainer.style.left = `${e.clientX - offsetX}px`; 
+            appContainer.style.top = `${e.clientY - offsetY}px`; 
+            appContainer.style.right = 'auto'; 
+        } 
+    }
+
+    const dragHeader = appContainer.querySelector('#gf-draggable-header');
+    let isDragging = false, offsetX = 0, offsetY = 0;
+    if (dragHeader) {
+        dragHeader.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.gf-close')) return;
+            isDragging = true;
+            offsetX = e.clientX - appContainer.offsetLeft;
+            offsetY = e.clientY - appContainer.offsetTop;
+            document.addEventListener('mousemove', dragMove);
+            document.addEventListener('mouseup', () => { isDragging = false; document.removeEventListener('mousemove', dragMove); });
+        });
+    }
+
+    function initializeSuiteEventHandlers() {
+        const suiteEl = document.getElementById('g-flights-suite'), toggleEl = document.getElementById('gf-toggle-handle');
+        if (!suiteEl || !toggleEl) return;
+
+        toggleEl.addEventListener('click', () => { 
+            suiteEl.style.setProperty('display', 'flex', 'important'); 
+            toggleEl.style.display = 'none';
+        });
+        document.getElementById('gf-close-window').addEventListener('click', () => { 
+            suiteEl.style.setProperty('display', 'none', 'important'); 
+            toggleEl.style.setProperty('display', 'flex', 'important'); 
+        });
+        document.getElementById('gf-submit-search').addEventListener('click', executeFlightSearch);
+        
+        document.getElementById('gf-tab-best').addEventListener('click', () => setTabActive('best'));
+        document.getElementById('gf-tab-cheapest').addEventListener('click', () => setTabActive('cheapest'));
+        document.getElementById('gf-tab-other').addEventListener('click', () => setTabActive('other'));
+
+        document.getElementById('gf-filter-alliance').addEventListener('change', processAndRenderFilters);
+        document.getElementById('gf-filter-airline').addEventListener('input', processAndRenderFilters);
+        document.getElementById('gf-filter-duration').addEventListener('input', processAndRenderFilters);
+        document.getElementById('gf-filter-stops').addEventListener('change', processAndRenderFilters);
+        document.getElementById('gf-filter-price').addEventListener('input', processAndRenderFilters);
+        document.getElementById('gf-filter-class').addEventListener('change', processAndRenderFilters);
+        document.getElementById('gf-filter-adults').addEventListener('change', processAndRenderFilters);
+        document.getElementById('gf-filter-children').addEventListener('change', processAndRenderFilters);
+        document.getElementById('gf-bag-carry').addEventListener('change', processAndRenderFilters);
+        document.getElementById('gf-bag-checked').addEventListener('change', processAndRenderFilters);
+        document.getElementById('gf-date-input').addEventListener('change', processAndRenderFilters);
+        document.getElementById('gf-matrix-sort').addEventListener('change', processAndRenderFilters);
+    }
+
+    function injectUIElements() {
+        if (!document.body) {
+            setTimeout(injectUIElements, 50);
+            return;
+        }
+
+        if (!document.getElementById('gf-toggle-handle')) {
+            const toggleButton = document.createElement('div');
+            toggleButton.id = 'gf-toggle-handle';
+            toggleButton.innerHTML = `<span>🌐</span> Open Advanced Flight Search`;
+            toggleButton.style.cssText = "position: fixed !important; bottom: 20px !important; right: 20px !important; z-index: 99999998 !important; display: flex !important; background: #2563eb; color: white; padding: 10px 16px; border-radius: 30px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);";
+            document.body.appendChild(toggleButton);
+        }
+
+        if (!document.getElementById('g-flights-suite')) {
+            document.body.appendChild(appContainer);
+            updateTravelGuidePanels("ISB"); 
+        }
+        
+        initializeSuiteEventHandlers();
+    }
+
+    injectUIElements();
+})();
