@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v10.0)
 // @namespace    https://github.com/raid2256
-// @version      9.5
-// @description  Google Flights style suite with exact-string airport resolution, three-tab category splitting, competition tracking metrics, and allied interline surcharge calculations.
+// @version      10.0
+// @description  Google Flights style suite with exact-string airport resolution, three-tab category splitting, competition tracking metrics, allied interline surcharge calculations, airline market share monitoring, and multi-ticket transfer safety matrices.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -113,6 +113,11 @@
         .gf-comp-high { background: rgba(239, 68, 68, 0.15); color: #ef4444; border-color: rgba(239, 68, 68, 0.4); }
         .gf-comp-mid { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border-color: rgba(245, 158, 11, 0.4); }
         .gf-comp-low { background: rgba(34, 197, 94, 0.15); color: #22c55e; border-color: rgba(34, 197, 94, 0.4); }
+
+        .gf-badge-transfer-safety { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; text-transform: uppercase; }
+        .gf-safety-safe { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+        .gf-safety-risky { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+        .gf-safety-critical { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
         
         .gf-layover { font-size: 11px; color: #fb923c; background: rgba(251, 146, 60, 0.1); border: 1px dashed rgba(251, 146, 60, 0.3); text-align: center; padding: 6px; border-radius: 6px; margin: 2px 0; font-weight: 600; }
         .gf-layover.tight-warning { color: #f87171; background: rgba(248, 113, 113, 0.1); border-color: rgba(248, 113, 113, 0.4); }
@@ -162,7 +167,6 @@
         if (typeof searchCachedData === 'function') {
             try {
                 const matches = searchCachedData('airport', cleanIata);
-                // Strict validation to avoid adjacent city index parsing leaks
                 const exactMatch = matches.find(m => String(m.airportIata).toUpperCase() === cleanIata || String(m.airportIcao).toUpperCase() === cleanIata);
                 if (exactMatch) return exactMatch.airportId;
             } catch (err) {
@@ -293,6 +297,12 @@
                     <div id="gf-price-chart" class="gf-chart-container"></div>
                 </div>
                 <div class="gf-advisory-section">
+                    <div class="gf-advisory-title">Market Share Dominance</div>
+                    <div id="gf-dominance-box" class="gf-scrollbox-inner">
+                        <span style="font-size:11px; color:#71717a;">Submit search to map airline share.</span>
+                    </div>
+                </div>
+                <div class="gf-advisory-section">
                     <div class="gf-advisory-title">Destination Attractions</div>
                     <div id="gf-attractions-box" class="gf-scrollbox-inner">
                         <span style="font-size:11px; color:#71717a;">Submit search to see attractions.</span>
@@ -414,6 +424,45 @@
         }
     };
 
+    // --- High-Level Upgrade: Market Penetration Tracker Calculation Loop ---
+    function computeMarketDominance(qualifiedGroup) {
+        const dominanceBox = document.getElementById('gf-dominance-box');
+        if (!qualifiedGroup || qualifiedGroup.length === 0) {
+            dominanceBox.innerHTML = `<span style="font-size:11px; color:#71717a;">No market data.</span>`;
+            return;
+        }
+
+        let carrierFlightCounts = {};
+        let totalFlightSegments = 0;
+
+        qualifiedGroup.forEach(wrapper => {
+            wrapper.data.legs.forEach(leg => {
+                leg.forEach(flight => {
+                    if (flight.airlineName) {
+                        carrierFlightCounts[flight.airlineName] = (carrierFlightCounts[flight.airlineName] || 0) + 1;
+                        totalFlightSegments++;
+                    }
+                });
+            });
+        });
+
+        let sortedCarriers = Object.entries(carrierFlightCounts).sort((a, b) => b[1] - a[1]);
+        
+        dominanceBox.innerHTML = sortedCarriers.map(([carrierName, count]) => {
+            const percentage = Math.round((count / totalFlightSegments) * 100);
+            let stanceLabel = "Active Network";
+            if (percentage >= 50) stanceLabel = "🏆 Dominant Monopoly";
+            else if (percentage >= 25) stanceLabel = "🔥 Major Stakeholder";
+
+            return `
+                <div class="gf-list-item">
+                    <span style="font-weight: 500;">📊 ${carrierName}</span>
+                    <span style="color: #60a5fa; font-size:11px;">${percentage}% (${stanceLabel})</span>
+                </div>
+            `;
+        }).join('');
+    }
+
     function updateTravelGuidePanels(destCode, generatedPrices) {
         const attractionsBox = document.getElementById('gf-attractions-box');
         const hotelsBox = document.getElementById('gf-hotels-box');
@@ -453,7 +502,6 @@
 
         distributionBuckets.forEach((count, idx) => {
             const bar = document.createElement('div');
-            bar.createElement;
             bar.className = 'gf-chart-bar';
             const calculatedPercentage = (count / maxBucketCount) * 100;
             bar.style.height = `${Math.max(calculatedPercentage, 6)}%`;
@@ -496,16 +544,22 @@
         let evaluatedItineraries = [];
 
         compiledItineraries.forEach(itinerary => {
-            // --- Feature 2: Alliance Interlining Surcharge Processing Engine ---
+            // --- Feature: Alliance Interlining Surcharge Processing Engine ---
             let interlineFeesTotal = 0;
+            let criticalLayoverWindowFloor = Infinity;
 
             itinerary.legs.forEach(leg => {
                 for (let i = 0; i < leg.length; i++) {
                     if (i > 0) {
                         const carrierA = leg[i - 1].airlineName;
                         const carrierB = leg[i].airlineName;
+                        const transitGap = leg[i].departure - leg[i - 1].arrival;
 
                         if (carrierA !== carrierB) {
+                            if (transitGap < criticalLayoverWindowFloor) {
+                                criticalLayoverWindowFloor = transitGap;
+                            }
+
                             const allianceA = getAirlineAlliance(carrierA);
                             const allianceB = getAirlineAlliance(carrierB);
 
@@ -553,13 +607,22 @@
             });
 
             activePrices.push(adjustedCost);
-            evaluatedItineraries.push({ data: itinerary, calculatedPrice: adjustedCost, isSplitTicket: isSplitTicket, totalInterlineFees: interlineFeesTotal });
+            evaluatedItineraries.push({ 
+                data: itinerary, 
+                calculatedPrice: adjustedCost, 
+                isSplitTicket: isSplitTicket, 
+                totalInterlineFees: interlineFeesTotal,
+                shortestSplitLayover: criticalLayoverWindowFloor
+            });
         });
 
         if (evaluatedItineraries.length === 0) {
             resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">No itineraries match your filters.</div>`;
             return;
         }
+
+        // Aggregate dominance data strictly for currently qualified itineraries
+        computeMarketDominance(evaluatedItineraries);
 
         const lowestPriceOverall = Math.min(...activePrices);
         const guaranteeBoundary = lowestPriceOverall * 1.10;
@@ -631,7 +694,20 @@
             if (finalCalculatedCost <= guaranteeBoundary) badgesHtml += `<span class="gf-badge-guarantee">🛡️ Price Guarantee</span>`;
             if (wrapper.isSplitTicket) badgesHtml += `<span class="gf-badge-selftransfer">⚠️ Multi-Ticket Split</span>`;
 
-            // --- Feature 1: Flight Capacity and Scheduling Saturation Analyzer ---
+            // --- Feature 2: Multi-Ticket Split Connection Layover Safety Rating ---
+            if (wrapper.isSplitTicket && wrapper.shortestSplitLayover !== Infinity) {
+                let safetyMarkup = '';
+                if (wrapper.shortestSplitLayover > 180) {
+                    safetyMarkup = `<span class="gf-badge-transfer-safety gf-safety-safe">🟢 Safe Transfer Window</span>`;
+                } else if (wrapper.shortestSplitLayover >= 90) {
+                    safetyMarkup = `<span class="gf-badge-transfer-safety gf-safety-risky">🟡 Risky Transfer Window</span>`;
+                } else {
+                    safetyMarkup = `<span class="gf-badge-transfer-safety gf-safety-critical">🔴 Critical Transfer Window</span>`;
+                }
+                badgesHtml += safetyMarkup;
+            }
+
+            // --- Feature: Flight Capacity and Scheduling Saturation Analyzer ---
             let uniqueCarrierSet = new Set();
             let flightSegmentCount = 0;
 
