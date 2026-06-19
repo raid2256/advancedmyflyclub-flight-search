@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MyFlyClub Advanced Flight Search (Optimized Modular Build)
 // @namespace    https://github.com/raid2256
-// @version      6.3
+// @version      6.4
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -32,7 +32,6 @@
         "United Skies": ["Dirt Cheap Airlines", "ALPHA", "Orion Airways", "VANGUARD", "Dobrolyot", "Orbis", "Freedom Express"]
     };
 
-    // Inject styles automatically
     const style = document.createElement('style');
     style.id = 'g-flights-styles';
     style.innerHTML = `
@@ -40,7 +39,6 @@
         .gf-header { background: #1e1e24; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #27272a; flex-shrink: 0; cursor: move; }
         .gf-title { font-weight: 700; color: #60a5fa; font-size: 15px; display: flex; align-items: center; gap: 6px; }
         .gf-close { background: none; border: none; color: #a1a1aa; cursor: pointer; font-size: 16px; font-weight: bold; }
-        #gf-toggle-handle { position: fixed; bottom: 20px; right: 20px; background: #2563eb; color: white; padding: 10px 16px; border-radius: 30px; font-weight: bold; font-size: 13px; cursor: pointer; z-index: 99999998 !important; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; gap: 6px; }
         .gf-controls { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; background: #18181b; border-bottom: 1px solid #27272a; flex-shrink: 0; }
         .gf-row { display: flex; gap: 8px; align-items: flex-end; width: 100%; flex-wrap: wrap; }
         .gf-input-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 100px; }
@@ -48,15 +46,12 @@
         .gf-legs-builder { display: flex; flex-direction: column; gap: 6px; max-height: 110px; overflow-y: auto; }
         .gf-leg-builder-row { display: flex; gap: 8px; align-items: center; background: #202024; padding: 4px 6px; border-radius: 8px; border: 1px solid #27272a; }
         .gf-add-leg-btn { background: none; border: 1px dashed #3f3f46; color: #60a5fa; padding: 5px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; text-align: center; width: 100%; }
-        .gf-remove-leg-btn { background: none; border: none; color: #f87171; cursor: pointer; font-weight: bold; }
         .gf-btn { background: #2563eb; color: #ffffff; border: none; padding: 0 16px; border-radius: 8px; font-weight: 600; cursor: pointer; height: 36px; display: inline-flex; align-items: center; justify-content: center; }
         .gf-workspace { display: flex; flex: 1; min-height: 0; overflow: hidden; background: #09090b; }
         .gf-left-advisory { width: 340px; border-right: 1px solid #27272a; background: #141416; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; flex-shrink: 0; }
         .gf-advisory-section { background: #1e1e24; border: 1px solid #27272a; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; }
         .gf-advisory-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #60a5fa; margin-bottom: 8px; }
         .gf-chart-container { display: flex; align-items: flex-end; gap: 4px; height: 75px; padding-top: 10px; border-bottom: 1px solid #3f3f46; margin-bottom: 6px; }
-        .gf-chart-bar { flex: 1; background: #2563eb; border-radius: 3px 3px 0 0; min-height: 3px; cursor: pointer; }
-        .gf-chart-bar.lowest-deal { background: #22c55e !important; }
         .gf-right-container { flex: 1; display: flex; flex-direction: column; min-height: 0; }
         .gf-matrix-tabs { display: flex; width: 100%; border-bottom: 1px solid #27272a; background: #18181b; flex-shrink: 0; }
         .gf-tab-item { flex: 1; text-align: center; padding: 14px 6px; font-size: 13px; font-weight: 600; color: #a1a1aa; cursor: pointer; border-bottom: 2px solid transparent; }
@@ -65,27 +60,6 @@
         .gf-card { background: #1e1e24; border: 1px solid #27272a; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; }
         .gf-summary { display: flex; justify-content: space-between; align-items: center; }
         .gf-price { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
-        .gf-stops { font-size: 12px; color: #a1a1aa; background: #27272a; padding: 2px 8px; border-radius: 20px; }
-        .gf-summary-badges { display: flex; gap: 4px; }
-        .gf-summary-alert { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: bold; }
-        .gf-legs-container { display: flex; flex-direction: column; gap: 6px; }
-        .gf-leg { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: #141416; border-radius: 6px; border-left: 3px solid #3b82f6; }
-        .gf-leg.split-ticket-segment { border-left-color: #eab308; }
-        .gf-leg.alliance-partner-segment { border-left-color: #22c55e; }
-        .gf-leg-title { font-size: 13px; font-weight: 600; color: #f4f4f5; display: flex; justify-content: space-between; }
-        .gf-leg-sub { font-size: 11px; color: #71717a; display: flex; justify-content: space-between; }
-        .gf-details { display: none; background: #141416; padding: 12px; border-radius: 8px; font-size: 12px; color: #d4d4d8; border: 1px solid #27272a; flex-direction: column; gap: 8px; }
-        .gf-details.active { display: flex; }
-        .gf-detail-section { display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid #27272a; padding-bottom: 8px; }
-        .gf-detail-row { display: flex; justify-content: space-between; }
-        .gf-detail-label { color: #a1a1aa; }
-        .gf-badge { background: #065f46; color: #34d399; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; text-transform: uppercase; }
-        .gf-badge-guarantee { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
-        .gf-badge-selftransfer { background: rgba(234, 179, 8, 0.15); color: #fde047; border: 1px solid rgba(234, 179, 8, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
-        .gf-badge-alliance { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
-        .gf-layover { font-size: 11px; color: #fb923c; background: rgba(251, 146, 60, 0.1); border: 1px dashed rgba(251, 146, 60, 0.3); text-align: center; padding: 6px; border-radius: 6px; font-weight: 600; }
-        .p-low { color: #4ade80; } .p-mid { color: #facc15; } .p-high { color: #f87171; }
-        .q-excellent { color: #4ade80; } .q-good { color: #a3e635; } .q-average { color: #facc15; } .q-poor { color: #fb923c; } .q-terrible { color: #f87171; }
     `;
     document.head.appendChild(style);
 
@@ -93,21 +67,6 @@
         const h = Math.floor(minutes / 60);
         const m = minutes % 60;
         return h > 0 ? `${h}h ${m}m` : `${m}m`;
-    }
-
-    function getQualityTier(score) {
-        if (score >= 80) return { text: `Excellent (${score/10}/10)`, class: 'q-excellent' };
-        if (score >= 60) return { text: `Good (${score/10}/10)`, class: 'q-good' };
-        if (score >= 50) return { text: `Average (${score/10}/10)`, class: 'q-average' };
-        if (score >= 40) return { text: `Poor (${score/10}/10)`, class: 'q-poor' };
-        return { text: `Terrible (${score/10}/10)`, class: 'q-terrible' };
-    }
-
-    function getAirlineAlliance(name) {
-        for (const [allianceName, members] of Object.entries(allianceMap)) {
-            if (members.includes(name)) return allianceName;
-        }
-        return null;
     }
 
     function lookupAirportId(iata) {
@@ -125,7 +84,7 @@
         activeResultTab = tabName;
         document.querySelectorAll('.gf-tab-item').forEach(el => el.classList.remove('active'));
         document.getElementById(`gf-tab-${tabName}`).classList.add('active');
-        processAndRenderFilters(); // Force list recalculation on click
+        processAndRenderFilters(); 
     }
 
     const appContainer = document.createElement('div');
@@ -172,15 +131,6 @@
             </div>
         </div>
     `;
-    document.body.appendChild(appContainer);
-
-    function updateTravelGuidePanels(destCode, generatedPrices) {
-        const chartBox = document.getElementById('gf-price-chart');
-        const summaryText = document.getElementById('gf-trend-summary-text');
-        chartBox.innerHTML = '';
-        if (!generatedPrices || generatedPrices.length === 0) { summaryText.innerText = "No metrics."; return; }
-        summaryText.innerText = `Spread: $${Math.min(...generatedPrices)} - $${Math.max(...generatedPrices)}.`;
-    }
 
     function processAndRenderFilters() {
         const resultsBox = document.getElementById('gf-results-box');
@@ -192,7 +142,7 @@
             let isSplitTicket = false;
             let currentAirline = null;
             itinerary.legs.forEach(leg => {
-                leg.forEach((flight, idx) => {
+                leg.forEach((flight) => {
                     totalTransitMinutes += (flight.duration || 120);
                     if (!currentAirline) currentAirline = flight.airlineName;
                     else if (currentAirline !== flight.airlineName) isSplitTicket = true;
@@ -201,7 +151,6 @@
             evaluatedItineraries.push({ data: itinerary, calculatedPrice: itinerary.totalCost, isSplitTicket: isSplitTicket, totalDurationMinutes: totalTransitMinutes });
         });
 
-        // Split arrays strictly based on active selection categories
         let tabBest = [], tabCheapest = [], tabOther = [];
         evaluatedItineraries.sort((a,b) => a.calculatedPrice - b.calculatedPrice);
         
@@ -221,6 +170,14 @@
             card.innerHTML = `<div class="gf-summary"><span class="gf-price">$${wrapper.calculatedPrice}</span><span>⏱️ ${formatDuration(wrapper.totalDurationMinutes)}</span></div>`;
             resultsBox.appendChild(card);
         });
+
+        const chartPrices = evaluatedItineraries.map(i => i.calculatedPrice);
+        const chartBox = document.getElementById('gf-price-chart');
+        const summaryText = document.getElementById('gf-trend-summary-text');
+        chartBox.innerHTML = '';
+        if (chartPrices.length > 0) {
+            summaryText.innerText = `Spread: $${Math.min(...chartPrices)} - $${Math.max(...chartPrices)}.`;
+        }
     }
 
     function generatePermutations(legsArray) {
@@ -251,7 +208,10 @@
         if (responseData.length === 0) {
             const hubQueries = GLOBAL_ROUTING_HUBS.map(hub => {
                 const hId = lookupAirportId(hub);
-                return Promise.all([fetch(`/search-route/${fromId}/${hId}`).then(r => r.json()), fetch(`/search-route/${hId}/${toId}`).then(r => r.json())]);
+                return Promise.all([
+                    fetch(`/search-route/${fromId}/${hId}`).then(r => r.ok ? r.json() : []),
+                    fetch(`/search-route/${hId}/${toId}`).then(r => r.ok ? r.json() : [])
+                ]);
             });
             const hubResults = await Promise.all(hubQueries);
             hubResults.forEach(([a, b]) => {
@@ -265,17 +225,43 @@
 
     function initializeSuiteEventHandlers() {
         const suiteEl = document.getElementById('g-flights-suite'), toggleEl = document.getElementById('gf-toggle-handle');
-        if (!suiteEl || !toggleEl) { setTimeout(initializeSuiteEventHandlers, 100); return; }
+        if (!suiteEl || !toggleEl) return;
 
-        toggleEl.addEventListener('click', () => { suiteEl.style.display = 'flex'; toggleEl.style.display = 'none'; });
-        document.getElementById('gf-close-window').addEventListener('click', () => { suiteEl.style.display = 'none'; toggleEl.style.display = 'flex'; });
+        toggleEl.addEventListener('click', () => { 
+            suiteEl.style.setProperty('display', 'flex', 'important'); 
+            toggleEl.style.setProperty('display', 'none', 'important'); 
+        });
+        document.getElementById('gf-close-window').addEventListener('click', () => { 
+            suiteEl.style.setProperty('display', 'none', 'important'); 
+            toggleEl.style.setProperty('display', 'flex', 'important'); 
+        });
         document.getElementById('gf-submit-search').addEventListener('click', executeFlightSearch);
         
-        // Tab triggers assigned directly to the refresh controller logic
         document.getElementById('gf-tab-best').addEventListener('click', () => setTabActive('best'));
         document.getElementById('gf-tab-cheapest').addEventListener('click', () => setTabActive('cheapest'));
         document.getElementById('gf-tab-other').addEventListener('click', () => setTabActive('other'));
     }
 
-    initializeSuiteEventHandlers();
+    function injectUIElements() {
+        if (!document.body) {
+            setTimeout(injectUIElements, 50);
+            return;
+        }
+
+        if (!document.getElementById('gf-toggle-handle')) {
+            const toggleButton = document.createElement('div');
+            toggleButton.id = 'gf-toggle-handle';
+            toggleButton.innerHTML = `<span>🌐</span> Open Advanced Flight Search`;
+            toggleButton.style.cssText = "position: fixed !important; bottom: 20px !important; right: 20px !important; z-index: 99999998 !important; display: flex !important; background: #2563eb; color: white; padding: 10px 16px; border-radius: 30px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);";
+            document.body.appendChild(toggleButton);
+        }
+
+        if (!document.getElementById('g-flights-suite')) {
+            document.body.appendChild(appContainer);
+        }
+        
+        initializeSuiteEventHandlers();
+    }
+
+    injectUIElements();
 })();
