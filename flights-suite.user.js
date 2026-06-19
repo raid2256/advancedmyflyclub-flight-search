@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MyFlyClub Advanced Flight Search (Ultimate Full-Feature Edition)
 // @namespace    https://github.com/raid2256
-// @version      7.5
+// @version      7.6
 // @description  Fully-featured Google Flights style suite with dynamic travel directories, multi-hub bridging backups, customizable baggage weight modifiers, layout overrides, and smooth tab rendering.
 // @match        *://*.myfly.club/*
 // @grant        none
@@ -19,14 +19,12 @@
 
     const GLOBAL_ROUTING_HUBS = ["MEL", "SYD", "SIN", "DXB", "JFK", "LAX", "LHR", "HND", "DOH", "IST"];
     
-    // Core database dictionary overrides to guarantee execution connection
     const HUB_ID_DIRECTORY = { 
         "MEL": 3600, "SYD": 3601, "SIN": 1205, "DXB": 2404, "JFK": 501, 
         "LAX": 502, "LHR": 801, "HND": 1502, "DOH": 2406, "IST": 1901,
         "LST": 1361, "ISB": 614, "SVO": 1235, "DME": 1236
     };
 
-    // Deep geographic tracking directory for target hubs and major global tourist cities
     const dynamicGeoDirectory = {
         "JFK": {
             attractions: ["Times Square Neon Experience", "Central Park Guided Bike Tour", "Empire State Building Deck", "Statue of Liberty Ferry"],
@@ -206,7 +204,6 @@
         const hotelsBox = document.getElementById('gf-hotels-box');
         const cleanCode = String(destCode).trim().toUpperCase();
 
-        // Strict fallback loop: if city code isn't in directory, auto-generate standard metadata
         const guide = dynamicGeoDirectory[cleanCode] || {
             attractions: [`${cleanCode} Downtown Historical Center Tour`, `${cleanCode} Regional Landmark Sightseeing`, `${cleanCode} Public Exhibition Park`],
             hotels: [`${cleanCode} Grand Airport Palace Resort ($135/nt)`, `${cleanCode} Terminal Premium Business Inn ($90/nt)`]
@@ -371,6 +368,11 @@
             });
         });
 
+        if (activePrices.length === 0) {
+            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 50px;">No itineraries match your active parameters.</div>`;
+            return;
+        }
+
         if (sortByValue === 'price') {
             evaluatedItineraries.sort((a, b) => a.calculatedPrice - b.calculatedPrice);
         } else {
@@ -391,7 +393,7 @@
 
         resultsBox.innerHTML = '';
         if (activeTargetGroup.length === 0) {
-            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 50px;">No flights inside this segment categories.</div>`;
+            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 50px;">No flights inside this segment category.</div>`;
             return;
         }
 
@@ -478,17 +480,40 @@
         }
     }
 
+    // Fully restored deep-layered recursive routing matrix compiler 
     function generatePermutations(legsArray) {
         if (!legsArray || legsArray.length === 0) return [];
+        
+        // Base Level: Convert raw array objects into matching leg structures
         if (legsArray.length === 1) {
-            if (!legsArray[0] || !Array.isArray(legsArray[0])) return [];
-            return legsArray[0].map(i => {
-                const flights = i.route ? i.route.filter(l => l.transportType === 'FLIGHT') : [];
-                const cost = i.route ? i.route.reduce((a, f) => a + (f.price || 0), 0) : 0;
-                return { legs: [flights], totalCost: cost };
-            });
+            return legsArray[0].map(itineraryObj => {
+                const flights = itineraryObj.route ? itineraryObj.route.filter(l => l.transportType === 'FLIGHT') : [];
+                const cost = itineraryObj.route ? itineraryObj.route.reduce((acc, f) => acc + (f.price || 0), 0) : 0;
+                return {
+                    legs: [flights],
+                    totalCost: cost
+                };
+            }).filter(item => item.legs[0].length > 0);
         }
-        return [];
+
+        const subPermutations = generatePermutations(legsArray.slice(1));
+        const currentLegOptions = legsArray[0];
+        const combined = [];
+
+        currentLegOptions.forEach(currentItinerary => {
+            const currentFlights = currentItinerary.route ? currentItinerary.route.filter(l => l.transportType === 'FLIGHT') : [];
+            const currentCost = currentItinerary.route ? currentItinerary.route.reduce((acc, f) => acc + (f.price || 0), 0) : 0;
+            
+            if (currentFlights.length > 0) {
+                subPermutations.forEach(subItinerary => {
+                    combined.push({
+                        legs: [currentFlights, ...subItinerary.legs],
+                        totalCost: currentCost + subItinerary.totalCost
+                    });
+                });
+            }
+        });
+        return combined;
     }
 
     async function executeFlightSearch() {
@@ -505,17 +530,19 @@
             return; 
         }
 
+        let segmentsData = [];
         let responseData = [];
         try {
             const directRes = await fetch(`/search-route/${fromId}/${toId}`);
             if (directRes.ok) responseData = await directRes.json();
         } catch (e) {}
 
+        // Fire full Multi-Hub Bridging loop engine if direct array is empty
         if (!responseData || responseData.length === 0) {
             responseData = [];
             const hubQueries = GLOBAL_ROUTING_HUBS.map(hub => {
                 const hId = lookupAirportId(hub);
-                if (!hId) return Promise.resolve([[], []]);
+                if (!hId || hId === fromId || hId === toId) return Promise.resolve([[], []]);
                 return Promise.all([
                     fetch(`/search-route/${fromId}/${hId}`).then(r => r.ok ? r.json() : []),
                     fetch(`/search-route/${hId}/${toId}`).then(r => r.ok ? r.json() : [])
@@ -523,18 +550,24 @@
             });
             
             const hubResults = await Promise.all(hubQueries);
-            hubResults.forEach(([a, b]) => {
-                if (a && b && a.length > 0 && b.length > 0) {
-                    a.forEach(itA => b.forEach(itB => {
-                        if (itA.route && itB.route) responseData.push({ route: [...itA.route, ...itB.route] });
-                    }));
+            hubResults.forEach(([flightsToHub, flightsFromHub]) => {
+                if (flightsToHub && flightsToHub.length > 0 && flightsFromHub && flightsFromHub.length > 0) {
+                    flightsToHub.forEach(itA => {
+                        flightsFromHub.forEach(itB => {
+                            if (itA.route && itB.route) {
+                                responseData.push({ route: [...itA.route, ...itB.route] });
+                            }
+                        });
+                    });
                 }
             });
         }
 
         if (responseData && responseData.length > 0) {
-            compiledItineraries = generatePermutations([responseData]);
+            segmentsData.push(responseData);
+            compiledItineraries = generatePermutations(segmentsData);
         }
+        
         processAndRenderFilters();
 
         if (builderBox.lastElementChild) {
@@ -605,7 +638,7 @@
 
         if (!document.getElementById('g-flights-suite')) {
             document.body.appendChild(appContainer);
-            updateTravelGuidePanels("ISB"); // Default initialization layout panel data
+            updateTravelGuidePanels("ISB"); 
         }
         
         initializeSuiteEventHandlers();
