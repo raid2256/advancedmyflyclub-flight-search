@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Intelligence Edition)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite)
 // @namespace    https://github.com/raid2256
-// @version      9.0
-// @description  Google Flights style suite upgraded with custom Competitor Saturation Trackers and dynamic Alliance Interlining Surcharge algorithms.
+// @version      9.5
+// @description  Google Flights style suite with exact-string airport resolution, three-tab category splitting, competition tracking metrics, and allied interline surcharge calculations.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -17,7 +17,7 @@
     let compiledItineraries = [];
     let activeResultTab = 'best'; 
 
-    // Alliance map for interlining calculations
+    // Full Alliance Matrix for interlining and dynamic surcharge mapping
     const allianceMap = {
         "Animals": ["Fox and Friends", "Cats", "The Panda", "Shiba", "Narwhal", "Dragon", "Goblins"],
         "Come To Brasil": ["Logic Air", "CityJet", "Global Connect", "Global Express", "Gondor Air", "Mordor Air", "Chungking Express"],
@@ -67,7 +67,6 @@
         .gf-btn:hover { background: #1d4ed8; }
         
         .gf-workspace { display: flex; flex: 1; min-height: 0; overflow: hidden; background: #09090b; }
-        
         .gf-left-advisory { width: 340px; border-right: 1px solid #27272a; background: #141416; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; flex-shrink: 0; }
         .gf-advisory-section { background: #1e1e24; border: 1px solid #27272a; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; }
         .gf-advisory-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #60a5fa; margin-bottom: 8px; letter-spacing: 0.5px; }
@@ -155,6 +154,7 @@
         return null;
     }
 
+    // Bug-Fixed Exact String Match Airport Resolver Engine
     function lookupAirportId(iata) {
         const cleanIata = String(iata).trim().toUpperCase();
         if (!isNaN(cleanIata) && cleanIata.length > 0) return parseInt(cleanIata); 
@@ -162,10 +162,11 @@
         if (typeof searchCachedData === 'function') {
             try {
                 const matches = searchCachedData('airport', cleanIata);
+                // Strict validation to avoid adjacent city index parsing leaks
                 const exactMatch = matches.find(m => String(m.airportIata).toUpperCase() === cleanIata || String(m.airportIcao).toUpperCase() === cleanIata);
                 if (exactMatch) return exactMatch.airportId;
             } catch (err) {
-                console.warn("Dynamic lookup chain skipped:", err);
+                console.warn("Cached data index parsing bypassed:", err);
             }
         }
 
@@ -227,6 +228,7 @@
                     <select id="gf-filter-adults" class="gf-input">
                         <option value="1">1 adult</option>
                         <option value="2">2 adults</option>
+                        <option value="3">3 adults</option>
                     </select>
                 </div>
                 <div class="gf-input-group">
@@ -234,6 +236,7 @@
                     <select id="gf-filter-children" class="gf-input">
                         <option value="0">0 children</option>
                         <option value="1">1 child</option>
+                        <option value="2">2 children</option>
                     </select>
                 </div>
                 <div class="gf-input-group">
@@ -404,6 +407,10 @@
         "ISB": {
             attractions: ["Faisal Mosque Landmark", "Margalla Hills Drive", "Lok Virsa Cultural Museum"],
             hotels: ["The Islamabad Serena Palace ($280/nt)", "Margalla View Executive Suites ($115/nt)"]
+        },
+        "HNL": {
+            attractions: ["Waikiki Beachfront Strip", "Diamond Head Crater Path", "Pearl Harbor Memorial Site"],
+            hotels: ["The Royal Hawaiian Resort ($410/nt)", "Hilton Hawaiian Village ($295/nt)"]
         }
     };
 
@@ -446,6 +453,7 @@
 
         distributionBuckets.forEach((count, idx) => {
             const bar = document.createElement('div');
+            bar.createElement;
             bar.className = 'gf-chart-bar';
             const calculatedPercentage = (count / maxBucketCount) * 100;
             bar.style.height = `${Math.max(calculatedPercentage, 6)}%`;
@@ -488,9 +496,8 @@
         let evaluatedItineraries = [];
 
         compiledItineraries.forEach(itinerary => {
-            // --- Feature 2: Alliance Interlining Surcharge Analysis ---
+            // --- Feature 2: Alliance Interlining Surcharge Processing Engine ---
             let interlineFeesTotal = 0;
-            let currentLegAllianceHtml = [];
 
             itinerary.legs.forEach(leg => {
                 for (let i = 0; i < leg.length; i++) {
@@ -569,6 +576,7 @@
             });
         }
 
+        // --- Three-Tab Google Flights Category Division Setup ---
         let tabBest = [], tabCheapest = [], tabOther = [];
         const costCapCheapest = lowestPriceOverall * 1.15; 
 
@@ -623,25 +631,25 @@
             if (finalCalculatedCost <= guaranteeBoundary) badgesHtml += `<span class="gf-badge-guarantee">🛡️ Price Guarantee</span>`;
             if (wrapper.isSplitTicket) badgesHtml += `<span class="gf-badge-selftransfer">⚠️ Multi-Ticket Split</span>`;
 
-            // --- Feature 1: Competitor Capacity and Load Factor Integration ---
-            let loadFactorSum = 0;
+            // --- Feature 1: Flight Capacity and Scheduling Saturation Analyzer ---
+            let uniqueCarrierSet = new Set();
             let flightSegmentCount = 0;
 
             itinerary.legs.forEach(leg => {
                 leg.forEach(flight => {
-                    if (flight.loadFactor !== undefined) {
-                        loadFactorSum += flight.loadFactor;
+                    if (flight.airlineName) {
+                        uniqueCarrierSet.add(flight.airlineName);
                         flightSegmentCount++;
                     }
                 });
             });
 
+            // Map competition levels cleanly based on route scheduling frequencies
             let competitionBadgeHtml = '';
             if (flightSegmentCount > 0) {
-                const avgLoadFactor = loadFactorSum / flightSegmentCount;
-                if (avgLoadFactor > 80) {
+                if (uniqueCarrierSet.size >= 4 || flightSegmentCount > 3) {
                     competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-high">🔴 High Competition</span>`;
-                } else if (avgLoadFactor >= 50) {
+                } else if (uniqueCarrierSet.size >= 2) {
                     competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-mid">🟡 Medium Competition</span>`;
                 } else {
                     competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-low">🟢 Low Competition</span>`;
@@ -690,7 +698,7 @@
                     let calculatedPower = "No outlets available";
 
                     if (rawFeatures.includes('WIFI') || qScore >= 75) calculatedWifi = "Free High-Speed Wi-Fi Included";
-                    if (rawFeatures.includes('IFE') || (qScore >= 70 && durationMins >= 180)) calculatedIfe = "On-demand seatback video monitors";
+                    if (rawFeatures.includes('IFE') || (qScore >= 70 && durationMins >= 180)) calculatedIfe = "On-demand video monitors";
                     if (rawFeatures.includes('POWER_OUTLET') || qScore >= 70 || cabinClass !== 'economy') calculatedPower = "In-seat AC power outlets";
 
                     const allianceName = getAirlineAlliance(flight.airlineName) || "Independent Carrier";
@@ -743,7 +751,7 @@
                 <div class="gf-details">
                     ${combinedAmenitiesHtml}
                     <div class="gf-detail-section" style="border-top: 1px solid #3f3f46; margin-top: 4px; padding-top: 6px;">
-                        <div class="gf-detail-row"><span class="gf-detail-label">Alliance Interline Fees:</span><span class="gf-detail-val" style="color:#c084fc;">+$${wrapper.totalInterlineFees}</span></div>
+                        <div class="gf-detail-row"><span class="gf-detail-label">Alliance Interline Overheads:</span><span class="gf-detail-val" style="color:#c084fc;">+$${wrapper.totalInterlineFees}</span></div>
                         <div class="gf-detail-row"><span class="gf-detail-label">Emissions estimate:</span><span class="gf-detail-val" style="color:#facc15;">${emissionsTotal} kg CO2e</span></div>
                     </div>
                 </div>
@@ -811,7 +819,7 @@
                 const resolvedToId = lookupAirportId(leg.to);
 
                 if (!resolvedFromId || !resolvedToId) {
-                    throw new Error(`Could not resolve dynamic destination markers [From: ${leg.from} -> To: ${leg.to}]`);
+                    throw new Error(`Could not resolve destination markers [From: ${leg.from} -> To: ${leg.to}]`);
                 }
 
                 fetchPromises.push(fetch(`/search-route/${resolvedFromId}/${resolvedToId}`).then(res => {
