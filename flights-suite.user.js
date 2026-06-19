@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MyFlyClub Advanced Flight Search (Ultimate Global Router Edition)
 // @namespace    https://github.com/raid2256
-// @version      6.0
+// @version      6.1
 // @description  Google Flights style suite with a built-in cross-hub navigation network, autocomplete matching translations, custom amenity criteria scaling, three generic tabs, and price insights.
 // @match        *://*.myfly.club/*
 // @grant        none
@@ -40,7 +40,7 @@
             position: fixed; top: 15px; right: 15px; width: 940px; height: 840px;
             background: #121214; color: #e4e4e7; border: 1px solid #27272a;
             border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.7);
-            z-index: 999999; font-family: system-ui, -apple-system, sans-serif;
+            z-index: 99999999 !important; font-family: system-ui, -apple-system, sans-serif;
             display: none; flex-direction: column; overflow: hidden;
             max-width: calc(100vw - 30px); max-height: calc(100vh - 30px);
         }
@@ -49,7 +49,7 @@
         .gf-close { background: none; border: none; color: #a1a1aa; cursor: pointer; font-size: 16px; font-weight: bold; }
         .gf-close:hover { color: #f4f4f5; }
         
-        #gf-toggle-handle { position: fixed; bottom: 20px; right: 20px; background: #2563eb; color: white; padding: 10px 16px; border-radius: 30px; font-weight: bold; font-size: 13px; cursor: pointer; z-index: 999998; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; gap: 6px; transition: background 0.2s, transform 0.15s; }
+        #gf-toggle-handle { position: fixed; bottom: 20px; right: 20px; background: #2563eb; color: white; padding: 10px 16px; border-radius: 30px; font-weight: bold; font-size: 13px; cursor: pointer; z-index: 99999998 !important; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; gap: 6px; transition: background 0.2s, transform 0.15s; }
         #gf-toggle-handle:hover { background: #1d4ed8; transform: translateY(-2px); }
         
         .gf-controls { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; background: #18181b; border-bottom: 1px solid #27272a; flex-shrink: 0; }
@@ -171,7 +171,6 @@
         return null;
     }
 
-    // Resolves IATA strings or numeric inputs to active map features key IDs
     function lookupAirportId(iata) {
         const cleanIata = String(iata).trim().toUpperCase();
         if (!isNaN(cleanIata) && cleanIata.length > 0) return parseInt(cleanIata); 
@@ -338,65 +337,6 @@
         </div>
     `;
     document.body.appendChild(appContainer);
-
-    function setTabActive(tabName) {
-        activeResultTab = tabName;
-        document.querySelectorAll('.gf-tab-item').forEach(el => el.classList.remove('active'));
-        document.getElementById(`gf-tab-${tabName}`).classList.add('active');
-        processAndRenderFilters();
-    }
-    document.getElementById('gf-tab-best').addEventListener('click', () => setTabActive('best'));
-    document.getElementById('gf-tab-cheapest').addEventListener('click', () => setTabActive('cheapest'));
-    document.getElementById('gf-tab-other').addEventListener('click', () => setTabActive('other'));
-
-    const dragHeader = document.getElementById('gf-draggable-header');
-    let isDragging = false;
-    let offsetX = 0, offsetY = 0;
-
-    dragHeader.addEventListener('mousedown', (e) => {
-        if (e.target.closest('.gf-close') || window.innerWidth <= 768) return;
-        isDragging = true;
-        offsetX = e.clientX - appContainer.offsetLeft;
-        offsetY = e.clientY - appContainer.offsetTop;
-        document.addEventListener('mousemove', dragMove);
-        document.addEventListener('mouseup', stopDrag);
-    });
-
-    function dragMove(e) {
-        if (!isDragging) return;
-        appContainer.style.left = `${e.clientX - offsetX}px`;
-        appContainer.style.top = `${e.clientY - offsetY}px`;
-        appContainer.style.right = 'auto';
-    }
-
-    function stopDrag() {
-        isDragging = false;
-        document.removeEventListener('mousemove', dragMove);
-        document.removeEventListener('mouseup', stopDrag);
-    }
-
-    document.getElementById('gf-add-leg-trigger').addEventListener('click', () => {
-        const builderBox = document.getElementById('gf-legs-builder-box');
-        const currentCount = builderBox.children.length;
-        const previousToVal = builderBox.lastElementChild.querySelector('.gf-loc-to').value.toUpperCase();
-
-        const newRow = document.createElement('div');
-        newRow.className = 'gf-leg-builder-row';
-        newRow.setAttribute('data-leg-index', currentCount);
-        newRow.innerHTML = `
-            <div class="gf-input-group">
-                <span class="gf-label">From</span>
-                <input type="text" class="gf-input gf-loc-from" placeholder="e.g. LAX" value="${previousToVal}">
-            </div>
-            <div class="gf-input-group">
-                <span class="gf-label">To</span>
-                <input type="text" class="gf-input gf-loc-to" placeholder="e.g. JFK">
-            </div>
-            <button class="gf-remove-leg-btn">✕</button>
-        `;
-        newRow.querySelector('.gf-remove-leg-btn').addEventListener('click', () => { newRow.remove(); });
-        builderBox.appendChild(newRow);
-    });
 
     function updateTravelGuidePanels(destCode, generatedPrices) {
         const attractionsBox = document.getElementById('gf-attractions-box');
@@ -862,8 +802,6 @@
                     console.warn(`Direct endpoint query failure on segment ${leg.from}->${leg.to}:`, e);
                 }
 
-                // --- ADVANCED KEY LOOKUP FALLBACK ENGINE ---
-                // Automatically triggers parallel searches through global connector hub database IDs if the grid returns empty
                 if (!responseData || responseData.length === 0) {
                     console.log(`Direct path empty for ${leg.from}->${leg.to}. Deploying parallel connector hub loops...`);
                     resultsBox.innerHTML = `<div style="color: #a78bfa; text-align: center; margin-top: 100px;">Direct path empty. Scouring global connector hubs for connections...</div>`;
@@ -872,7 +810,6 @@
                     for (const hubIata of GLOBAL_ROUTING_HUBS) {
                         if (hubIata === leg.from || hubIata === leg.to) continue;
                         
-                        // Translate the hub text into the active database ID integer on the fly
                         const targetHubId = lookupAirportId(hubIata);
                         if (!isNaN(targetHubId)) {
                             const queryA = fetch(`/search-route/${fromId}/${targetHubId}`).then(r => r.ok ? r.json() : []);
@@ -883,7 +820,6 @@
 
                     const hubResults = await Promise.all(hubQueries);
                     
-                    // Stitch the successful cross-hub legs back into unified flight itineraries
                     hubResults.forEach(([flightsToHub, flightsFromHub]) => {
                         if (flightsToHub && flightsToHub.length > 0 && flightsFromHub && flightsFromHub.length > 0) {
                             flightsToHub.forEach(itineraryA => {
@@ -909,17 +845,54 @@
         }
     }
 
-    document.getElementById('gf-submit-search').addEventListener('click', executeFlightSearch);
-    document.getElementById('gf-filter-alliance').addEventListener('change', processAndRenderFilters);
-    document.getElementById('gf-filter-airline').addEventListener('input', processAndRenderFilters);
-    document.getElementById('gf-filter-duration').addEventListener('input', processAndRenderFilters);
-    document.getElementById('gf-filter-stops').addEventListener('change', processAndRenderFilters);
-    document.getElementById('gf-filter-price').addEventListener('input', processAndRenderFilters);
-    document.getElementById('gf-filter-class').addEventListener('change', processAndRenderFilters);
-    document.getElementById('gf-filter-adults').addEventListener('change', processAndRenderFilters);
-    document.getElementById('gf-filter-children').addEventListener('change', processAndRenderFilters);
-    document.getElementById('gf-bag-carry').addEventListener('change', processAndRenderFilters);
-    document.getElementById('gf-bag-checked').addEventListener('change', processAndRenderFilters);
-    document.getElementById('gf-date-input').addEventListener('change', processAndRenderFilters);
-    document.getElementById('gf-matrix-sort').addEventListener('change', processAndRenderFilters);
+    // Wrap setup initialization loop routines safely inside a dynamic document checker block
+    function initializeSuiteEventHandlers() {
+        const suiteEl = document.getElementById('g-flights-suite');
+        const toggleEl = document.getElementById('gf-toggle-handle');
+        const closeEl = document.getElementById('gf-close-window');
+        const searchBtn = document.getElementById('gf-submit-search');
+
+        if (!suiteEl || !toggleEl) {
+            console.warn("Advanced Search elements not fully loaded inside DOM registry yet. Retrying listener instantiation thread...");
+            setTimeout(initializeSuiteEventHandlers, 100);
+            return;
+        }
+
+        // Direct event layout mappings
+        toggleEl.addEventListener('click', function() {
+            suiteEl.style.setProperty('display', 'flex', 'important');
+            toggleEl.style.setProperty('display', 'none', 'important');
+        });
+
+        if (closeEl) {
+            closeEl.addEventListener('click', function() {
+                suiteEl.style.setProperty('display', 'none', 'important');
+                toggleEl.style.setProperty('display', 'flex', 'important');
+            });
+        }
+
+        if (searchBtn) searchBtn.addEventListener('click', executeFlightSearch);
+
+        document.getElementById('gf-filter-alliance').addEventListener('change', processAndRenderFilters);
+        document.getElementById('gf-filter-airline').addEventListener('input', processAndRenderFilters);
+        document.getElementById('gf-filter-duration').addEventListener('input', processAndRenderFilters);
+        document.getElementById('gf-filter-stops').addEventListener('change', processAndRenderFilters);
+        document.getElementById('gf-filter-price').addEventListener('input', processAndRenderFilters);
+        document.getElementById('gf-filter-class').addEventListener('change', processAndRenderFilters);
+        document.getElementById('gf-filter-adults').addEventListener('change', processAndRenderFilters);
+        document.getElementById('gf-filter-children').addEventListener('change', processAndRenderFilters);
+        document.getElementById('gf-bag-carry').addEventListener('change', processAndRenderFilters);
+        document.getElementById('gf-bag-checked').addEventListener('change', processAndRenderFilters);
+        document.getElementById('gf-date-input').addEventListener('change', processAndRenderFilters);
+        document.getElementById('gf-matrix-sort').addEventListener('change', processAndRenderFilters);
+        
+        console.log("Advanced Flight Search Event Handlers successfully bound to active canvas panels.");
+    }
+
+    // Run layout configuration loops
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeSuiteEventHandlers);
+    } else {
+        initializeSuiteEventHandlers();
+    }
 })();
