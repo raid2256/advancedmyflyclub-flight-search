@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v12.1)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v12.2)
 // @namespace    https://github.com/raid2256
-// @version      12.1
+// @version      12.2
 // @description  Google Flights style suite with exact-string airport resolution, three-tab category splitting, competition tracking metrics, allied interline surcharge calculations, airline market share monitoring, multi-ticket transfer safety matrices, Reverse-Route Open Discovery, Multi-Currency Conversion, Fleet details mapping, and Quick-Swap Route toggling.
 // @match        *://*.myfly.club/*
 // @grant        none
@@ -549,7 +549,6 @@
         const maxStops = document.getElementById('gf-filter-stops').value;
         const maxPriceInput = parseFloat(document.getElementById('gf-filter-price').value) || Infinity;
         
-        // Convert input cap ceiling against baseline metrics dynamically
         const currentBaseRate = currencyRates[activeCurrency].rate;
         const maxPrice = maxPriceInput / currentBaseRate;
 
@@ -869,7 +868,7 @@
         if (legsArray.length === 1) {
             return legsArray[0].map(itineraryObj => ({
                 legs: [itineraryObj.route.filter(l => l.transportType === 'FLIGHT')],
-                totalCost: itineraryObj.route.route.reduce((acc, f) => acc + (f.price || 0), 0)
+                totalCost: itineraryObj.route.reduce((acc, f) => acc + (f.price || 0), 0)
             }));
         }
         const subPermutations = generatePermutations(legsArray.slice(1));
