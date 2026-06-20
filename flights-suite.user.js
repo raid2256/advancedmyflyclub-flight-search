@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v10.0)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v12.0)
 // @namespace    https://github.com/raid2256
-// @version      10.0
-// @description  Google Flights style suite with exact-string airport resolution, three-tab category splitting, competition tracking metrics, allied interline surcharge calculations, airline market share monitoring, and multi-ticket transfer safety matrices.
+// @version      12.0
+// @description  Google Flights style suite with exact-string airport resolution, three-tab category splitting, competition tracking metrics, allied interline surcharge calculations, airline market share monitoring, multi-ticket transfer safety matrices, Reverse-Route Open Discovery, Multi-Currency Conversion, Fleet details mapping, and Quick-Swap Route toggling.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -17,7 +17,25 @@
     let compiledItineraries = [];
     let activeResultTab = 'best'; 
 
-    // Full Alliance Matrix for interlining and dynamic surcharge mapping
+    // Currency exchange database mapping (relative to base game currency $)
+    const currencyRates = {
+        "USD": { symbol: "$", rate: 1.0 },
+        "EUR": { symbol: "€", rate: 0.92 },
+        "GBP": { symbol: "£", rate: 0.79 },
+        "AUD": { symbol: "A$", rate: 1.52 }
+    };
+    let activeCurrency = "USD";
+
+    // Fleet specification matrix for aircraft details feature
+    const fleetConfigMap = {
+        "Boeing 777": { layout: "3-4-3 Arrangement", pitch: "31-32\" Standard Economy", config: "Wide-body Twin Jet" },
+        "Boeing 787": { layout: "3-3-3 Arrangement", pitch: "32\" Dreamliner Standard", config: "High-Efficiency Wide-body" },
+        "Airbus A350": { layout: "3-3-3 Arrangement", pitch: "32-33\" Extra Wide Ergonomics", config: "Advanced Composite Wide-body" },
+        "Airbus A320": { layout: "3-3 Arrangement", pitch: "30\" Short-Haul Standard", config: "Narrow-body Single Aisle" },
+        "Boeing 737": { layout: "3-3 Arrangement", pitch: "30-31\" Single Aisle", config: "Narrow-body Standard" },
+        "Airbus A380": { layout: "3-4-3 Lower / 2-4-2 Upper", pitch: "32-34\" Double Decker Spacing", config: "Ultra-Large Quad Jet Superjumbo" }
+    };
+
     const allianceMap = {
         "Animals": ["Fox and Friends", "Cats", "The Panda", "Shiba", "Narwhal", "Dragon", "Goblins"],
         "Come To Brasil": ["Logic Air", "CityJet", "Global Connect", "Global Express", "Gondor Air", "Mordor Air", "Chungking Express"],
@@ -52,11 +70,14 @@
         
         .gf-controls { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; background: #18181b; border-bottom: 1px solid #27272a; flex-shrink: 0; }
         .gf-row { display: flex; gap: 8px; align-items: flex-end; width: 100%; flex-wrap: wrap; }
-        .gf-input-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 100px; }
+        .gf-input-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 100px; position: relative; }
         .gf-input { width: 100%; padding: 8px 10px; background: #27272a; border: 1px solid #3f3f46; color: #ffffff; border-radius: 8px; font-size: 13px; outline: none; box-sizing: border-box; height: 36px; }
         .gf-input:focus { border-color: #3b82f6; }
         .gf-label { font-size: 11px; color: #a1a1aa; font-weight: 600; display: block; }
         
+        .gf-swap-btn { background: #27272a; border: 1px solid #3f3f46; color: #a1a1aa; border-radius: 50%; width: 26px; height: 26px; min-width: 26px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s, color 0.2s; margin-bottom: 5px; font-size: 14px; padding: 0; user-select: none; }
+        .gf-swap-btn:hover { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+
         .gf-legs-builder { display: flex; flex-direction: column; gap: 6px; max-height: 110px; overflow-y: auto; padding-right: 4px; }
         .gf-leg-builder-row { display: flex; gap: 8px; align-items: center; background: #202024; padding: 4px 6px; border-radius: 8px; border: 1px solid #27272a; }
         .gf-add-leg-btn { background: none; border: 1px dashed #3f3f46; color: #60a5fa; padding: 5px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; text-align: center; width: 100%; margin-top: -4px; }
@@ -137,29 +158,13 @@
     `;
     document.head.appendChild(style);
 
-    function formatDuration(minutes) {
-        const h = Math.floor(minutes / 60);
-        const m = minutes % 60;
-        return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    function formatPrice(val) {
+        const profile = currencyRates[activeCurrency];
+        const calculatedValue = Math.round(val * profile.rate);
+        return `${profile.symbol}${calculatedValue.toLocaleString()}`;
     }
 
-    function getQualityTier(score) {
-        if (score >= 80) return { text: `Excellent (${score/10}/10)`, class: 'q-excellent' };
-        if (score >= 60) return { text: `Good (${score/10}/10)`, class: 'q-good' };
-        if (score >= 50) return { text: `Average (${score/10}/10)`, class: 'q-average' };
-        if (score >= 40) return { text: `Poor (${score/10}/10)`, class: 'q-poor' };
-        return { text: `Terrible (${score/10}/10)`, class: 'q-terrible' };
-    }
-
-    function getAirlineAlliance(name) {
-        if (!name) return null;
-        for (const [allianceName, members] of Object.entries(allianceMap)) {
-            if (members.includes(name)) return allianceName;
-        }
-        return null;
-    }
-
-    // Bug-Fixed Exact String Match Airport Resolver Engine
+    // Exact string match airport lookup
     function lookupAirportId(iata) {
         const cleanIata = String(iata).trim().toUpperCase();
         if (!isNaN(cleanIata) && cleanIata.length > 0) return parseInt(cleanIata); 
@@ -201,9 +206,12 @@
                         <span class="gf-label">From</span>
                         <input type="text" class="gf-input gf-loc-from" placeholder="e.g. KHI" value="KHI">
                     </div>
+                    
+                    <button id="gf-swap-trigger-0" class="gf-swap-btn">⇄</button>
+                    
                     <div class="gf-input-group">
                         <span class="gf-label">To</span>
-                        <input type="text" class="gf-input gf-loc-to" placeholder="e.g. ISB" value="ISB">
+                        <input type="text" class="gf-input gf-loc-to" placeholder="e.g. ISB (or * for discovery)" value="ISB">
                     </div>
                     <span style="width:20px;"></span>
                 </div>
@@ -221,6 +229,15 @@
                         <option value="economy">Economy</option>
                         <option value="business">Business</option>
                         <option value="first">First Class</option>
+                    </select>
+                </div>
+                <div class="gf-input-group">
+                    <span class="gf-label">Currency</span>
+                    <select id="gf-currency-select" class="gf-input">
+                        <option value="USD">USD ($)</option>
+                        <option value="EUR">EUR (€)</option>
+                        <option value="GBP">GBP (£)</option>
+                        <option value="AUD">AUD (A$)</option>
                     </select>
                 </div>
                 <button id="gf-submit-search" class="gf-btn">Search</button>
@@ -283,7 +300,7 @@
                     </select>
                 </div>
                 <div class="gf-input-group" style="flex: 0.7;">
-                    <span class="gf-label">Max Fare Limit</span>
+                    <span class="gf-label">Max Fare Limit ($)</span>
                     <input type="number" id="gf-filter-price" class="gf-input" placeholder="Max Price ($)">
                 </div>
             </div>
@@ -332,6 +349,19 @@
     `;
     document.body.appendChild(appContainer);
 
+    // Swap tool trigger bindings
+    function bindSwapLogic(btnId, fromClass, toClass) {
+        document.getElementById(btnId).addEventListener('click', () => {
+            const row = document.getElementById(btnId).parentElement;
+            const fromInput = row.querySelector(fromClass);
+            const toInput = row.querySelector(toClass);
+            const temp = fromInput.value;
+            fromInput.value = toInput.value;
+            toInput.value = temp;
+        });
+    }
+    bindSwapLogic('gf-swap-trigger-0', '.gf-loc-from', '.gf-loc-to');
+
     toggleButton.addEventListener('click', () => {
         appContainer.style.display = 'flex';
         toggleButton.style.display = 'none';
@@ -351,6 +381,11 @@
     document.getElementById('gf-tab-best').addEventListener('click', () => setTabActive('best'));
     document.getElementById('gf-tab-cheapest').addEventListener('click', () => setTabActive('cheapest'));
     document.getElementById('gf-tab-other').addEventListener('click', () => setTabActive('other'));
+
+    document.getElementById('gf-currency-select').addEventListener('change', (e) => {
+        activeCurrency = e.target.value;
+        processAndRenderFilters();
+    });
 
     const dragHeader = document.getElementById('gf-draggable-header');
     let isDragging = false;
@@ -386,11 +421,13 @@
         const newRow = document.createElement('div');
         newRow.className = 'gf-leg-builder-row';
         newRow.setAttribute('data-leg-index', currentCount);
+        const uniqueBtnId = `gf-swap-trigger-${currentCount}`;
         newRow.innerHTML = `
             <div class="gf-input-group">
                 <span class="gf-label">From</span>
                 <input type="text" class="gf-input gf-loc-from" placeholder="e.g. LAX" value="${previousToVal}">
             </div>
+            <button id="${uniqueBtnId}" class="gf-swap-btn">⇄</button>
             <div class="gf-input-group">
                 <span class="gf-label">To</span>
                 <input type="text" class="gf-input gf-loc-to" placeholder="e.g. JFK">
@@ -399,32 +436,17 @@
         `;
         newRow.querySelector('.gf-remove-leg-btn').addEventListener('click', () => { newRow.remove(); });
         builderBox.appendChild(newRow);
+        bindSwapLogic(uniqueBtnId, '.gf-loc-from', '.gf-loc-to');
     });
 
     const dynamicGeoDirectory = {
-        "SYD": {
-            attractions: ["Sydney Opera House", "Bondi Beach", "Sydney Harbour Bridge", "Darling Harbour"],
-            hotels: ["Capella Sydney ($747/nt)", "Four Seasons Hotel Sydney ($390/nt)"]
-        },
-        "DXB": {
-            attractions: ["Burj Khalifa Tower", "The Dubai Mall", "Dubai Miracle Garden"],
-            hotels: ["Dubai International Hotel ($240/nt)", "Le Méridien Dubai ($185/nt)"]
-        },
-        "JFK": {
-            attractions: ["Times Square", "Central Park Waterfront", "Empire State Building"],
-            hotels: ["The Plaza Hotel ($680/nt)", "TWA Hotel JFK Airport ($245/nt)"]
-        },
-        "ISB": {
-            attractions: ["Faisal Mosque Landmark", "Margalla Hills Drive", "Lok Virsa Cultural Museum"],
-            hotels: ["The Islamabad Serena Palace ($280/nt)", "Margalla View Executive Suites ($115/nt)"]
-        },
-        "HNL": {
-            attractions: ["Waikiki Beachfront Strip", "Diamond Head Crater Path", "Pearl Harbor Memorial Site"],
-            hotels: ["The Royal Hawaiian Resort ($410/nt)", "Hilton Hawaiian Village ($295/nt)"]
-        }
+        "SYD": { attractions: ["Sydney Opera House", "Bondi Beach"], hotels: ["Capella Sydney ($747/nt)", "Four Seasons Sydney ($390/nt)"] },
+        "DXB": { attractions: ["Burj Khalifa Tower", "The Dubai Mall"], hotels: ["Dubai International Hotel ($240/nt)", "Le Méridien Dubai ($185/nt)"] },
+        "JFK": { attractions: ["Times Square", "Central Park Waterfront"], hotels: ["The Plaza Hotel ($680/nt)", "TWA Hotel JFK ($245/nt)"] },
+        "ISB": { attractions: ["Faisal Mosque Landmark", "Margalla Hills Drive"], hotels: ["Islamabad Serena Palace ($280/nt)", "Margalla View Executive ($115/nt)"] },
+        "HNL": { attractions: ["Waikiki Beachfront Strip", "Diamond Head Crater"], hotels: ["The Royal Hawaiian ($410/nt)", "Hilton Hawaiian Village ($295/nt)"] }
     };
 
-    // --- High-Level Upgrade: Market Penetration Tracker Calculation Loop ---
     function computeMarketDominance(qualifiedGroup) {
         const dominanceBox = document.getElementById('gf-dominance-box');
         if (!qualifiedGroup || qualifiedGroup.length === 0) {
@@ -447,19 +469,12 @@
         });
 
         let sortedCarriers = Object.entries(carrierFlightCounts).sort((a, b) => b[1] - a[1]);
-        
         dominanceBox.innerHTML = sortedCarriers.map(([carrierName, count]) => {
             const percentage = Math.round((count / totalFlightSegments) * 100);
             let stanceLabel = "Active Network";
             if (percentage >= 50) stanceLabel = "🏆 Dominant Monopoly";
             else if (percentage >= 25) stanceLabel = "🔥 Major Stakeholder";
-
-            return `
-                <div class="gf-list-item">
-                    <span style="font-weight: 500;">📊 ${carrierName}</span>
-                    <span style="color: #60a5fa; font-size:11px;">${percentage}% (${stanceLabel})</span>
-                </div>
-            `;
+            return `<div class="gf-list-item"><span style="font-weight: 500;">📊 ${carrierName}</span><span style="color: #60a5fa; font-size:11px;">${percentage}% (${stanceLabel})</span></div>`;
         }).join('');
     }
 
@@ -470,8 +485,8 @@
         const summaryText = document.getElementById('gf-trend-summary-text');
 
         const guide = dynamicGeoDirectory[destCode] || {
-            attractions: [`${destCode} Downtown Historical Tour`, `${destCode} Regional Landmark Sightseeing`],
-            hotels: [`${destCode} Grand Airport Palace Resort ($135/nt)`, `${destCode} Premium Transit Business Inn ($90/nt)`]
+            attractions: [`${destCode} Downtown Tour`, `${destCode} Regional Sightseeing`],
+            hotels: [`${destCode} Grand Airport Resort ($135/nt)`, `${destCode} Premium Transit Inn ($90/nt)`]
         };
 
         attractionsBox.innerHTML = guide.attractions.map(item => `<div class="gf-list-item"><span>📍 ${item}</span></div>`).join('');
@@ -485,7 +500,7 @@
 
         const minPrice = Math.min(...generatedPrices);
         const maxPrice = Math.max(...generatedPrices);
-        summaryText.innerText = `Prices spread from $${minPrice} to $${maxPrice}.`;
+        summaryText.innerText = `Spread: ${formatPrice(minPrice)} to ${formatPrice(maxPrice)}.`;
 
         const totalBarsCount = 16;
         const bucketSize = (maxPrice - minPrice) / totalBarsCount || 1;
@@ -505,7 +520,7 @@
             bar.className = 'gf-chart-bar';
             const calculatedPercentage = (count / maxBucketCount) * 100;
             bar.style.height = `${Math.max(calculatedPercentage, 6)}%`;
-            bar.title = `${count} itineraries around $${Math.round(minPrice + (idx * bucketSize))}`;
+            bar.title = `${count} itineraries around ${formatPrice(minPrice + (idx * bucketSize))}`;
 
             if (idx === lowestOccupiedBucket) bar.className += ' lowest-deal';
             chartBox.appendChild(bar);
@@ -516,8 +531,12 @@
         const resultsBox = document.getElementById('gf-results-box');
         const airlineQuery = document.getElementById('gf-filter-airline').value.toLowerCase();
         const maxStops = document.getElementById('gf-filter-stops').value;
-        const maxPrice = parseFloat(document.getElementById('gf-filter-price').value) || Infinity;
+        const maxPriceInput = parseFloat(document.getElementById('gf-filter-price').value) || Infinity;
         
+        // Convert input cap ceiling against baseline metrics dynamically
+        const currentBaseRate = currencyRates[activeCurrency].rate;
+        const maxPrice = maxPriceInput / currentBaseRate;
+
         const cabinClass = document.getElementById('gf-filter-class').value;
         const adultsCount = parseInt(document.getElementById('gf-filter-adults').value) || 1;
         const childrenCount = parseInt(document.getElementById('gf-filter-children').value) || 0;
@@ -544,7 +563,6 @@
         let evaluatedItineraries = [];
 
         compiledItineraries.forEach(itinerary => {
-            // --- Feature: Alliance Interlining Surcharge Processing Engine ---
             let interlineFeesTotal = 0;
             let criticalLayoverWindowFloor = Infinity;
 
@@ -556,9 +574,7 @@
                         const transitGap = leg[i].departure - leg[i - 1].arrival;
 
                         if (carrierA !== carrierB) {
-                            if (transitGap < criticalLayoverWindowFloor) {
-                                criticalLayoverWindowFloor = transitGap;
-                            }
+                            if (transitGap < criticalLayoverWindowFloor) criticalLayoverWindowFloor = transitGap;
 
                             const allianceA = getAirlineAlliance(carrierA);
                             const allianceB = getAirlineAlliance(carrierB);
@@ -621,7 +637,6 @@
             return;
         }
 
-        // Aggregate dominance data strictly for currently qualified itineraries
         computeMarketDominance(evaluatedItineraries);
 
         const lowestPriceOverall = Math.min(...activePrices);
@@ -639,7 +654,6 @@
             });
         }
 
-        // --- Three-Tab Google Flights Category Division Setup ---
         let tabBest = [], tabCheapest = [], tabOther = [];
         const costCapCheapest = lowestPriceOverall * 1.15; 
 
@@ -663,7 +677,7 @@
         if (activeResultTab === 'other') activeTargetGroup = tabOther;
 
         if (activeTargetGroup.length === 0) {
-            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 60px;">No additional itineraries found in this section category.</div>`;
+            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 60px;">No matching flights tier section.</div>`;
             return;
         }
 
@@ -694,20 +708,14 @@
             if (finalCalculatedCost <= guaranteeBoundary) badgesHtml += `<span class="gf-badge-guarantee">🛡️ Price Guarantee</span>`;
             if (wrapper.isSplitTicket) badgesHtml += `<span class="gf-badge-selftransfer">⚠️ Multi-Ticket Split</span>`;
 
-            // --- Feature 2: Multi-Ticket Split Connection Layover Safety Rating ---
             if (wrapper.isSplitTicket && wrapper.shortestSplitLayover !== Infinity) {
                 let safetyMarkup = '';
-                if (wrapper.shortestSplitLayover > 180) {
-                    safetyMarkup = `<span class="gf-badge-transfer-safety gf-safety-safe">🟢 Safe Transfer Window</span>`;
-                } else if (wrapper.shortestSplitLayover >= 90) {
-                    safetyMarkup = `<span class="gf-badge-transfer-safety gf-safety-risky">🟡 Risky Transfer Window</span>`;
-                } else {
-                    safetyMarkup = `<span class="gf-badge-transfer-safety gf-safety-critical">🔴 Critical Transfer Window</span>`;
-                }
+                if (wrapper.shortestSplitLayover > 180) safetyMarkup = `<span class="gf-badge-transfer-safety gf-safety-safe">🟢 Safe Window</span>`;
+                else if (wrapper.shortestSplitLayover >= 90) safetyMarkup = `<span class="gf-badge-transfer-safety gf-safety-risky">🟡 Risky Window</span>`;
+                else safetyMarkup = `<span class="gf-badge-transfer-safety gf-safety-critical">🔴 Critical Window</span>`;
                 badgesHtml += safetyMarkup;
             }
 
-            // --- Feature: Flight Capacity and Scheduling Saturation Analyzer ---
             let uniqueCarrierSet = new Set();
             let flightSegmentCount = 0;
 
@@ -720,16 +728,11 @@
                 });
             });
 
-            // Map competition levels cleanly based on route scheduling frequencies
             let competitionBadgeHtml = '';
             if (flightSegmentCount > 0) {
-                if (uniqueCarrierSet.size >= 4 || flightSegmentCount > 3) {
-                    competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-high">🔴 High Competition</span>`;
-                } else if (uniqueCarrierSet.size >= 2) {
-                    competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-mid">🟡 Medium Competition</span>`;
-                } else {
-                    competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-low">🟢 Low Competition</span>`;
-                }
+                if (uniqueCarrierSet.size >= 4 || flightSegmentCount > 3) competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-high">🔴 High Competition</span>`;
+                else if (uniqueCarrierSet.size >= 2) competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-mid">🟡 Medium Competition</span>`;
+                else competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-low">🟢 Low Competition</span>`;
             } else {
                 competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-low">🟢 Low Competition</span>`;
             }
@@ -745,17 +748,17 @@
                     if (fIndex > 0) {
                         const prevFlight = legFlights[fIndex - 1];
                         const layoverTime = flight.departure - prevFlight.arrival;
-                        const isOvernight = layoverTime > 480 ? ' 🌙 (Overnight Layover)' : '';
+                        const isOvernight = layoverTime > 480 ? ' 🌙 (Overnight)' : '';
                         
                         let layoverWarningStyle = "";
                         let layoverWarningText = "";
 
                         if (segmentIsSplit) {
                             layoverWarningStyle = " selftransfer-warning";
-                            layoverWarningText = ` ⚠️ Self-transfer required at ${flight.fromAirportIata}. Collect luggage & re-check.`;
+                            layoverWarningText = ` ⚠️ Self-transfer required at ${flight.fromAirportIata}.`;
                         } else if (layoverTime < 50) {
                             layoverWarningStyle = " tight-warning";
-                            layoverWarningText = " ⚠️ Tight connection warning (less than 50m)";
+                            layoverWarningText = " ⚠️ Tight connection (<50m)";
                         }
                         legsHtml += `<div class="gf-layover${layoverWarningStyle}">⏱️ Layover: ${formatDuration(layoverTime)}${isOvernight}${layoverWarningText}</div>`;
                     }
@@ -773,26 +776,30 @@
                     let calculatedIfe = "No streaming screens";
                     let calculatedPower = "No outlets available";
 
-                    if (rawFeatures.includes('WIFI') || qScore >= 75) calculatedWifi = "Free High-Speed Wi-Fi Included";
-                    if (rawFeatures.includes('IFE') || (qScore >= 70 && durationMins >= 180)) calculatedIfe = "On-demand video monitors";
-                    if (rawFeatures.includes('POWER_OUTLET') || qScore >= 70 || cabinClass !== 'economy') calculatedPower = "In-seat AC power outlets";
+                    if (rawFeatures.includes('WIFI') || qScore >= 75) calculatedWifi = "Free High-Speed Wi-Fi";
+                    if (rawFeatures.includes('IFE') || (qScore >= 70 && durationMins >= 180)) calculatedIfe = "On-demand monitors";
+                    if (rawFeatures.includes('POWER_OUTLET') || qScore >= 70 || cabinClass !== 'economy') calculatedPower = "AC power outlets";
 
                     const allianceName = getAirlineAlliance(flight.airlineName) || "Independent Carrier";
+                    
+                    // --- Fleet configurations resolution hook ---
+                    let modelMatchKey = Object.keys(fleetConfigMap).find(key => flight.airplaneModelName && flight.airplaneModelName.includes(key)) || "Generic Commercial";
+                    let specsProfile = fleetConfigMap[modelMatchKey] || { layout: "Standard Seat Pitch", pitch: "Comfort configurations unmapped", config: "Commercial Core Liner" };
 
                     const amenitiesList = [
                         { label: "Alliance Profile", val: allianceName },
-                        { label: "Cabin Class", val: classLabelText },
-                        { label: "Legroom", val: cabinClass === 'economy' ? (qScore > 70 ? 'Above-average (81 cm)' : 'Standard (78 cm)') : 'Premium First/Biz Suite' },
-                        { label: "Wi-Fi", val: calculatedWifi },
-                        { label: "Power Grid", val: calculatedPower },
-                        { label: "Entertainment", val: calculatedIfe }
+                        { label: "Cabin Grid", val: classLabelText },
+                        { label: "Fleet Type", val: `${flight.airplaneModelName || 'Commercial Jet'} (${specsProfile.config})` },
+                        { label: "Row Space / Layout", val: `${specsProfile.layout} • ${specsProfile.pitch}` },
+                        { label: "Wi-Fi Connectivity", val: calculatedWifi },
+                        { label: "Power & Entertainment", val: `${calculatedPower} • ${calculatedIfe}` }
                     ];
 
                     emissionsTotal += Math.round(durationMins * 4.2 * passengerCount);
 
                     combinedAmenitiesHtml += `
                         <div class="gf-detail-section">
-                            <div style="font-weight:bold; color:#60a5fa; margin-bottom:6px; font-size:12px;">Flight ${flight.flightCode || 'FLIGHT'} Details</div>
+                            <div style="font-weight:bold; color:#60a5fa; margin-bottom:6px; font-size:12px;">Flight ${flight.flightCode || 'FLIGHT'} Specifications</div>
                             ${amenitiesList.map(a => `
                                 <div class="gf-detail-row">
                                     <span class="gf-detail-label">${a.label}:</span>
@@ -806,7 +813,7 @@
                         <div class="gf-leg ${segmentIsSplit ? 'split-ticket-segment' : ''}">
                             <div class="gf-leg-title">
                                 <span>✈️ ${flight.flightCode || 'FLIGHT'} (${flight.fromAirportIata} ➔ ${flight.toAirportIata})</span>
-                                <span>$${Math.round((flight.price * classMultiplier + (baggageSurchargeTotal / itinerary.legs.reduce((s, l) => s + l.length, 0))) * passengerCount)} ${badgeHtml}</span>
+                                <span>${formatPrice((flight.price * classMultiplier + (baggageSurchargeTotal / itinerary.legs.reduce((s, l) => s + l.length, 0))) * passengerCount)} ${badgeHtml}</span>
                             </div>
                             <div class="gf-leg-sub">
                                 <span>${flight.airlineName} • <i style="color: #a1a1aa;">${flight.airplaneModelName || 'Commercial Jet'}</i></span>
@@ -819,7 +826,7 @@
 
             card.innerHTML = `
                 <div class="gf-summary">
-                    <span class="gf-price ${priceColorClass}">$${finalCalculatedCost} ${badgesHtml}</span>
+                    <span class="gf-price ${priceColorClass}">${formatPrice(finalCalculatedCost)} ${badgesHtml}</span>
                     <span style="font-size: 11px; color:#a1a1aa; font-weight:500;">📅 ${selectedDate || todayStr} (${passengerCount} pax)</span>
                     <span class="gf-stops">${totalStopsCount === 0 ? 'Nonstop Total' : totalStopsCount + ' Layovers'}</span>
                 </div>
@@ -827,7 +834,7 @@
                 <div class="gf-details">
                     ${combinedAmenitiesHtml}
                     <div class="gf-detail-section" style="border-top: 1px solid #3f3f46; margin-top: 4px; padding-top: 6px;">
-                        <div class="gf-detail-row"><span class="gf-detail-label">Alliance Interline Overheads:</span><span class="gf-detail-val" style="color:#c084fc;">+$${wrapper.totalInterlineFees}</span></div>
+                        <div class="gf-detail-row"><span class="gf-detail-label">Alliance Interline Overheads:</span><span class="gf-detail-val" style="color:#c084fc;">+${formatPrice(wrapper.totalInterlineFees)}</span></div>
                         <div class="gf-detail-row"><span class="gf-detail-label">Emissions estimate:</span><span class="gf-detail-val" style="color:#facc15;">${emissionsTotal} kg CO2e</span></div>
                     </div>
                 </div>
@@ -875,13 +882,11 @@
         Array.from(builderBox.children).forEach(row => {
             const fromCode = row.querySelector('.gf-loc-from').value.trim().toUpperCase();
             const toCode = row.querySelector('.gf-loc-to').value.trim().toUpperCase();
-            if (fromCode && toCode) {
-                rawNodes.push({ from: fromCode, to: toCode });
-            }
+            rawNodes.push({ from: fromCode, to: toCode });
         });
 
-        if (rawNodes.length === 0) {
-            resultsBox.innerHTML = `<div style="color: #f59e0b; text-align: center; margin-top: 50px;">Please specify destination pairs.</div>`;
+        if (rawNodes.length === 0 || !rawNodes[0].from) {
+            resultsBox.innerHTML = `<div style="color: #f59e0b; text-align: center; margin-top: 50px;">Please specify an origin hub.</div>`;
             return;
         }
 
@@ -889,28 +894,60 @@
         compiledItineraries = [];
 
         try {
-            const fetchPromises = [];
-            for (const leg of rawNodes) {
-                const resolvedFromId = lookupAirportId(leg.from);
-                const resolvedToId = lookupAirportId(leg.to);
+            const resolvedFromId = lookupAirportId(rawNodes[0].from);
+            if (!resolvedFromId) throw new Error(`Could not resolve origin airport code [${rawNodes[0].from}]`);
 
-                if (!resolvedFromId || !resolvedToId) {
-                    throw new Error(`Could not resolve destination markers [From: ${leg.from} -> To: ${leg.to}]`);
+            const targetToField = rawNodes[0].to;
+            const isOpenSearch = !targetToField || targetToField === '*';
+
+            if (isOpenSearch) {
+                const targetSampleDestinations = Object.keys(dynamicGeoDirectory).filter(code => code !== rawNodes[0].from);
+                const samplingPromises = [];
+
+                for (const destinationCode of targetSampleDestinations) {
+                    const destId = lookupAirportId(destinationCode);
+                    if (destId) {
+                        samplingPromises.push(
+                            fetch(`/search-route/${resolvedFromId}/${destId}`)
+                                .then(res => res.ok ? res.json() : null)
+                                .catch(() => null)
+                        );
+                    }
                 }
 
-                fetchPromises.push(fetch(`/search-route/${resolvedFromId}/${resolvedToId}`).then(res => {
-                    if (!res.ok) throw new Error(`Segment mapping failed`);
-                    return res.json();
-                }));
+                const completedDiscoveryArrays = await Promise.all(samplingPromises);
+                const validSectorsData = completedDiscoveryArrays.filter(data => data && data.length > 0);
+
+                if (validSectorsData.length === 0) throw new Error("No network discovery routing links found.");
+
+                let discoveredItineraries = [];
+                validSectorsData.forEach(sectorGroup => {
+                    discoveredItineraries.push(...generatePermutations([sectorGroup]));
+                });
+                compiledItineraries = discoveredItineraries;
+            } else {
+                const fetchPromises = [];
+                for (const leg of rawNodes) {
+                    const legFromId = lookupAirportId(leg.from);
+                    const legToId = lookupAirportId(leg.to);
+
+                    if (!legFromId || !legToId) throw new Error(`Could not resolve markers [From: ${leg.from} -> To: ${leg.to}]`);
+
+                    fetchPromises.push(fetch(`/search-route/${legFromId}/${legToId}`).then(res => {
+                        if (!res.ok) throw new Error(`Segment mapping failed`);
+                        return res.json();
+                    }));
+                }
+
+                const segmentsData = await Promise.all(fetchPromises);
+                compiledItineraries = generatePermutations(segmentsData);
             }
 
-            const segmentsData = await Promise.all(fetchPromises);
-            compiledItineraries = generatePermutations(segmentsData);
             processAndRenderFilters();
 
         } catch (error) {
-            console.error("Search thread failure caught:", error);
-            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">${error.message || 'Error tracking routes. Check airport strings.'}</div>`;
+            console.error("Search system crash intercepted:", error);
+            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">${error.message || 'Error parsing routes.'}</div>`;
         }
     }
 
