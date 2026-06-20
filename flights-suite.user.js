@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v12.0)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v12.1)
 // @namespace    https://github.com/raid2256
-// @version      12.0
+// @version      12.1
 // @description  Google Flights style suite with exact-string airport resolution, three-tab category splitting, competition tracking metrics, allied interline surcharge calculations, airline market share monitoring, multi-ticket transfer safety matrices, Reverse-Route Open Discovery, Multi-Currency Conversion, Fleet details mapping, and Quick-Swap Route toggling.
 // @match        *://*.myfly.club/*
 // @grant        none
@@ -164,7 +164,23 @@
         return `${profile.symbol}${calculatedValue.toLocaleString()}`;
     }
 
-    // Exact string match airport lookup
+    function getQualityTier(score) {
+        if (score >= 80) return { text: `Excellent (${score/10}/10)`, class: 'q-excellent' };
+        if (score >= 60) return { text: `Good (${score/10}/10)`, class: 'q-good' };
+        if (score >= 50) return { text: `Average (${score/10}/10)`, class: 'q-average' };
+        if (score >= 40) return { text: `Poor (${score/10}/10)`, class: 'q-poor' };
+        return { text: `Terrible (${score/10}/10)`, class: 'q-terrible' };
+    }
+
+    function getAirlineAlliance(name) {
+        if (!name) return null;
+        for (const [allianceName, members] of Object.entries(allianceMap)) {
+            if (members.includes(name)) return allianceName;
+        }
+        return null;
+    }
+
+    // Bug-Fixed Exact String Match Airport Resolver Engine
     function lookupAirportId(iata) {
         const cleanIata = String(iata).trim().toUpperCase();
         if (!isNaN(cleanIata) && cleanIata.length > 0) return parseInt(cleanIata); 
@@ -782,7 +798,6 @@
 
                     const allianceName = getAirlineAlliance(flight.airlineName) || "Independent Carrier";
                     
-                    // --- Fleet configurations resolution hook ---
                     let modelMatchKey = Object.keys(fleetConfigMap).find(key => flight.airplaneModelName && flight.airplaneModelName.includes(key)) || "Generic Commercial";
                     let specsProfile = fleetConfigMap[modelMatchKey] || { layout: "Standard Seat Pitch", pitch: "Comfort configurations unmapped", config: "Commercial Core Liner" };
 
@@ -854,7 +869,7 @@
         if (legsArray.length === 1) {
             return legsArray[0].map(itineraryObj => ({
                 legs: [itineraryObj.route.filter(l => l.transportType === 'FLIGHT')],
-                totalCost: itineraryObj.route.reduce((acc, f) => acc + (f.price || 0), 0)
+                totalCost: itineraryObj.route.route.reduce((acc, f) => acc + (f.price || 0), 0)
             }));
         }
         const subPermutations = generatePermutations(legsArray.slice(1));
