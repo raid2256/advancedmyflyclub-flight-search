@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v12.3)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v13.0)
 // @namespace    https://github.com/raid2256
-// @version      12.3
-// @description  Google Flights style suite with exact-string airport resolution, three-tab category splitting, competition tracking metrics, allied interline surcharge calculations, airline market share monitoring, multi-ticket transfer safety matrices, Reverse-Route Open Discovery, Multi-Currency Conversion, Fleet details mapping, and Quick-Swap Route toggling.
+// @version      13.0
+// @description  Google Flights style suite with exact-string airport resolution, three-tab category splitting, competition tracking metrics, allied interline surcharge calculations, airline market share monitoring, multi-ticket transfer safety matrices, Multi-Currency Conversion Matrix, Layout Seat Pitch Drawer, Quick-Swap Routes, Reverse Discovery, Dynamic Wi-Fi telemetry, and In-Flight Catering Matrices.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -17,7 +17,7 @@
     let compiledItineraries = [];
     let activeResultTab = 'best'; 
 
-    // Currency exchange database mapping (relative to base game currency $)
+    // Currency conversion mapping relative to base currency
     const currencyRates = {
         "USD": { symbol: "$", rate: 1.0 },
         "EUR": { symbol: "€", rate: 0.92 },
@@ -26,16 +26,17 @@
     };
     let activeCurrency = "USD";
 
-    // Fleet specification matrix for aircraft details feature
+    // Fleet configurations database
     const fleetConfigMap = {
-        "Boeing 777": { layout: "3-4-3 Arrangement", pitch: "31-32\" Standard Economy", config: "Wide-body Twin Jet" },
-        "Boeing 787": { layout: "3-3-3 Arrangement", pitch: "32\" Dreamliner Standard", config: "High-Efficiency Wide-body" },
-        "Airbus A350": { layout: "3-3-3 Arrangement", pitch: "32-33\" Extra Wide Ergonomics", config: "Advanced Composite Wide-body" },
-        "Airbus A320": { layout: "3-3 Arrangement", pitch: "30\" Short-Haul Standard", config: "Narrow-body Single Aisle" },
-        "Boeing 737": { layout: "3-3 Arrangement", pitch: "30-31\" Single Aisle", config: "Narrow-body Standard" },
-        "Airbus A380": { layout: "3-4-3 Lower / 2-4-2 Upper", pitch: "32-34\" Double Decker Spacing", config: "Ultra-Large Quad Jet Superjumbo" }
+        "Boeing 777": { layout: "3-4-3 Arrangement", pitch: "31-32\" Standard Economy", config: "Wide-body Twin Jet", wifiGen: "Satellite Ka-Band", baseSpeed: "Up to 100 Mbps" },
+        "Boeing 787": { layout: "3-3-3 Arrangement", pitch: "32\" Dreamliner Standard", config: "High-Efficiency Wide-body", wifiGen: "Satellite Ku-Band", baseSpeed: "Up to 50 Mbps" },
+        "Airbus A350": { layout: "3-3-3 Arrangement", pitch: "32-33\" Extra Wide Ergonomics", config: "Advanced Composite Wide-body", wifiGen: "Next-Gen Ka-Band", baseSpeed: "Up to 150 Mbps" },
+        "Airbus A320": { layout: "3-3 Arrangement", pitch: "30\" Short-Haul Standard", config: "Narrow-body Single Aisle", wifiGen: "Air-to-Ground 4G", baseSpeed: "Up to 15 Mbps" },
+        "Boeing 737": { layout: "3-3 Arrangement", pitch: "30-31\" Single Aisle", config: "Narrow-body Standard", wifiGen: "Satellite Ku-Band", baseSpeed: "Up to 40 Mbps" },
+        "Airbus A380": { layout: "3-4-3 Lower / 2-4-2 Upper", pitch: "32-34\" Double Decker Spacing", config: "Ultra-Large Quad Jet Superjumbo", wifiGen: "Dual-Band Satellite", baseSpeed: "Up to 80 Mbps" }
     };
 
+    // Full Alliance Matrix for interlining and dynamic surcharge mapping
     const allianceMap = {
         "Animals": ["Fox and Friends", "Cats", "The Panda", "Shiba", "Narwhal", "Dragon", "Goblins"],
         "Come To Brasil": ["Logic Air", "CityJet", "Global Connect", "Global Express", "Gondor Air", "Mordor Air", "Chungking Express"],
@@ -74,10 +75,10 @@
         .gf-input { width: 100%; padding: 8px 10px; background: #27272a; border: 1px solid #3f3f46; color: #ffffff; border-radius: 8px; font-size: 13px; outline: none; box-sizing: border-box; height: 36px; }
         .gf-input:focus { border-color: #3b82f6; }
         .gf-label { font-size: 11px; color: #a1a1aa; font-weight: 600; display: block; }
-        
+
         .gf-swap-btn { background: #27272a; border: 1px solid #3f3f46; color: #a1a1aa; border-radius: 50%; width: 26px; height: 26px; min-width: 26px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s, color 0.2s; margin-bottom: 5px; font-size: 14px; padding: 0; user-select: none; }
         .gf-swap-btn:hover { background: #3b82f6; color: #fff; border-color: #3b82f6; }
-
+        
         .gf-legs-builder { display: flex; flex-direction: column; gap: 6px; max-height: 110px; overflow-y: auto; padding-right: 4px; }
         .gf-leg-builder-row { display: flex; gap: 8px; align-items: center; background: #202024; padding: 4px 6px; border-radius: 8px; border: 1px solid #27272a; }
         .gf-add-leg-btn { background: none; border: 1px dashed #3f3f46; color: #60a5fa; padding: 5px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; text-align: center; width: 100%; margin-top: -4px; }
@@ -170,6 +171,7 @@
         return h > 0 ? `${h}h ${m}m` : `${m}m`;
     }
 
+    // Explicit quality checker function definition
     function getQualityTier(score) {
         if (score >= 80) return { text: `Excellent (${score/10}/10)`, class: 'q-excellent' };
         if (score >= 60) return { text: `Good (${score/10}/10)`, class: 'q-good' };
@@ -186,7 +188,7 @@
         return null;
     }
 
-    // Exact String Match Airport Resolver Engine
+    // Bug-Fixed Exact String Match Airport Resolver Engine
     function lookupAirportId(iata) {
         const cleanIata = String(iata).trim().toUpperCase();
         if (!isNaN(cleanIata) && cleanIata.length > 0) return parseInt(cleanIata); 
@@ -254,7 +256,7 @@
                     </select>
                 </div>
                 <div class="gf-input-group">
-                    <span class="gf-label">Currency</span>
+                    <span class="gf-label">Currency Switcher Matrix</span>
                     <select id="gf-currency-select" class="gf-input">
                         <option value="USD">USD ($)</option>
                         <option value="EUR">EUR (€)</option>
@@ -322,7 +324,7 @@
                     </select>
                 </div>
                 <div class="gf-input-group" style="flex: 0.7;">
-                    <span class="gf-label">Max Fare Limit ($)</span>
+                    <span class="gf-label">Max Fare Limit</span>
                     <input type="number" id="gf-filter-price" class="gf-input" placeholder="Max Price ($)">
                 </div>
             </div>
@@ -371,7 +373,7 @@
     `;
     document.body.appendChild(appContainer);
 
-    // Swap tool trigger bindings
+    // Swap tool trigger utility implementation
     function bindSwapLogic(btnId, fromClass, toClass) {
         document.getElementById(btnId).addEventListener('click', () => {
             const row = document.getElementById(btnId).parentElement;
@@ -462,11 +464,11 @@
     });
 
     const dynamicGeoDirectory = {
-        "SYD": { attractions: ["Sydney Opera House", "Bondi Beach"], hotels: ["Capella Sydney ($747/nt)", "Four Seasons Sydney ($390/nt)"] },
-        "DXB": { attractions: ["Burj Khalifa Tower", "The Dubai Mall"], hotels: ["Dubai International Hotel ($240/nt)", "Le Méridien Dubai ($185/nt)"] },
-        "JFK": { attractions: ["Times Square", "Central Park Waterfront"], hotels: ["The Plaza Hotel ($680/nt)", "TWA Hotel JFK ($245/nt)"] },
-        "ISB": { attractions: ["Faisal Mosque Landmark", "Margalla Hills Drive"], hotels: ["Islamabad Serena Palace ($280/nt)", "Margalla View Executive ($115/nt)"] },
-        "HNL": { attractions: ["Waikiki Beachfront Strip", "Diamond Head Crater"], hotels: ["The Royal Hawaiian ($410/nt)", "Hilton Hawaiian Village ($295/nt)"] }
+        "SYD": { attractions: ["Sydney Opera House", "Bondi Beach", "Sydney Harbour Bridge", "Darling Harbour"], hotels: ["Capella Sydney ($747/nt)", "Four Seasons Hotel Sydney ($390/nt)"] },
+        "DXB": { attractions: ["Burj Khalifa Tower", "The Dubai Mall", "Dubai Miracle Garden"], hotels: ["Dubai International Hotel ($240/nt)", "Le Méridien Dubai ($185/nt)"] },
+        "JFK": { attractions: ["Times Square", "Central Park Waterfront", "Empire State Building"], hotels: ["The Plaza Hotel ($680/nt)", "TWA Hotel JFK Airport ($245/nt)"] },
+        "ISB": { attractions: ["Faisal Mosque Landmark", "Margalla Hills Drive", "Lok Virsa Cultural Museum"], hotels: ["The Islamabad Serena Palace ($280/nt)", "Margalla View Executive Suites ($115/nt)"] },
+        "HNL": { attractions: ["Waikiki Beachfront Strip", "Diamond Head Crater Path", "Pearl Harbor Memorial Site"], hotels: ["The Royal Hawaiian Resort ($410/nt)", "Hilton Hawaiian Village ($295/nt)"] }
     };
 
     function computeMarketDominance(qualifiedGroup) {
@@ -507,8 +509,8 @@
         const summaryText = document.getElementById('gf-trend-summary-text');
 
         const guide = dynamicGeoDirectory[destCode] || {
-            attractions: [`${destCode} Downtown Tour`, `${destCode} Regional Sightseeing`],
-            hotels: [`${destCode} Grand Airport Resort ($135/nt)`, `${destCode} Premium Transit Inn ($90/nt)`]
+            attractions: [`${destCode} Downtown Historical Tour`, `${destCode} Regional Landmark Sightseeing`],
+            hotels: [`${destCode} Grand Airport Palace Resort ($135/nt)`, `${destCode} Premium Transit Business Inn ($90/nt)`]
         };
 
         attractionsBox.innerHTML = guide.attractions.map(item => `<div class="gf-list-item"><span>📍 ${item}</span></div>`).join('');
@@ -522,7 +524,7 @@
 
         const minPrice = Math.min(...generatedPrices);
         const maxPrice = Math.max(...generatedPrices);
-        summaryText.innerText = `Spread: ${formatPrice(minPrice)} to ${formatPrice(maxPrice)}.`;
+        summaryText.innerText = `Prices spread from ${formatPrice(minPrice)} to ${formatPrice(maxPrice)}.`;
 
         const totalBarsCount = 16;
         const bucketSize = (maxPrice - minPrice) / totalBarsCount || 1;
@@ -557,7 +559,7 @@
         
         const currentBaseRate = currencyRates[activeCurrency].rate;
         const maxPrice = maxPriceInput / currentBaseRate;
-
+        
         const cabinClass = document.getElementById('gf-filter-class').value;
         const adultsCount = parseInt(document.getElementById('gf-filter-adults').value) || 1;
         const childrenCount = parseInt(document.getElementById('gf-filter-children').value) || 0;
@@ -595,7 +597,9 @@
                         const transitGap = leg[i].departure - leg[i - 1].arrival;
 
                         if (carrierA !== carrierB) {
-                            if (transitGap < criticalLayoverWindowFloor) criticalLayoverWindowFloor = transitGap;
+                            if (transitGap < criticalLayoverWindowFloor) {
+                                criticalLayoverWindowFloor = transitGap;
+                            }
 
                             const allianceA = getAirlineAlliance(carrierA);
                             const allianceB = getAirlineAlliance(carrierB);
@@ -698,7 +702,7 @@
         if (activeResultTab === 'other') activeTargetGroup = tabOther;
 
         if (activeTargetGroup.length === 0) {
-            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 60px;">No matching flights tier section.</div>`;
+            resultsBox.innerHTML = `<div style="color: #71717a; text-align: center; margin-top: 60px;">No additional itineraries found in this section category.</div>`;
             return;
         }
 
@@ -731,9 +735,13 @@
 
             if (wrapper.isSplitTicket && wrapper.shortestSplitLayover !== Infinity) {
                 let safetyMarkup = '';
-                if (wrapper.shortestSplitLayover > 180) safetyMarkup = `<span class="gf-badge-transfer-safety gf-safety-safe">🟢 Safe Window</span>`;
-                else if (wrapper.shortestSplitLayover >= 90) safetyMarkup = `<span class="gf-badge-transfer-safety gf-safety-risky">🟡 Risky Window</span>`;
-                else safetyMarkup = `<span class="gf-badge-transfer-safety gf-safety-critical">🔴 Critical Window</span>`;
+                if (wrapper.shortestSplitLayover > 180) {
+                    safetyMarkup = `<span class="gf-badge-transfer-safety gf-safety-safe">🟢 Safe Transfer Window</span>`;
+                } else if (wrapper.shortestSplitLayover >= 90) {
+                    safetyMarkup = `<span class="gf-badge-transfer-safety gf-safety-risky">🟡 Risky Transfer Window</span>`;
+                } else {
+                    safetyMarkup = `<span class="gf-badge-transfer-safety gf-safety-critical">🔴 Critical Transfer Window</span>`;
+                }
                 badgesHtml += safetyMarkup;
             }
 
@@ -751,9 +759,13 @@
 
             let competitionBadgeHtml = '';
             if (flightSegmentCount > 0) {
-                if (uniqueCarrierSet.size >= 4 || flightSegmentCount > 3) competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-high">🔴 High Competition</span>`;
-                else if (uniqueCarrierSet.size >= 2) competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-mid">🟡 Medium Competition</span>`;
-                else competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-low">🟢 Low Competition</span>`;
+                if (uniqueCarrierSet.size >= 4 || flightSegmentCount > 3) {
+                    competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-high">🔴 High Competition</span>`;
+                } else if (uniqueCarrierSet.size >= 2) {
+                    competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-mid">🟡 Medium Competition</span>`;
+                } else {
+                    competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-low">🟢 Low Competition</span>`;
+                }
             } else {
                 competitionBadgeHtml = `<span class="gf-badge-competition gf-comp-low">🟢 Low Competition</span>`;
             }
@@ -769,17 +781,17 @@
                     if (fIndex > 0) {
                         const prevFlight = legFlights[fIndex - 1];
                         const layoverTime = flight.departure - prevFlight.arrival;
-                        const isOvernight = layoverTime > 480 ? ' 🌙 (Overnight)' : '';
+                        const isOvernight = layoverTime > 480 ? ' 🌙 (Overnight Layover)' : '';
                         
                         let layoverWarningStyle = "";
                         let layoverWarningText = "";
 
                         if (segmentIsSplit) {
                             layoverWarningStyle = " selftransfer-warning";
-                            layoverWarningText = ` ⚠️ Self-transfer required at ${flight.fromAirportIata}.`;
+                            layoverWarningText = ` ⚠️ Self-transfer required at ${flight.fromAirportIata}. Collect luggage & re-check.`;
                         } else if (layoverTime < 50) {
                             layoverWarningStyle = " tight-warning";
-                            layoverWarningText = " ⚠️ Tight connection (<50m)";
+                            layoverWarningText = " ⚠️ Tight connection warning (less than 50m)";
                         }
                         legsHtml += `<div class="gf-layover${layoverWarningStyle}">⏱️ Layover: ${formatDuration(layoverTime)}${isOvernight}${layoverWarningText}</div>`;
                     }
@@ -793,33 +805,44 @@
                     const rawFeatures = flight.features || [];
                     const durationMins = flight.duration || 120;
 
-                    let calculatedWifi = "Wi-Fi / Unavailable";
-                    let calculatedIfe = "No streaming screens";
-                    let calculatedPower = "No outlets available";
-
-                    if (rawFeatures.includes('WIFI') || qScore >= 75) calculatedWifi = "Free High-Speed Wi-Fi";
-                    if (rawFeatures.includes('IFE') || (qScore >= 70 && durationMins >= 180)) calculatedIfe = "On-demand monitors";
-                    if (rawFeatures.includes('POWER_OUTLET') || qScore >= 70 || cabinClass !== 'economy') calculatedPower = "AC power outlets";
-
                     const allianceName = getAirlineAlliance(flight.airlineName) || "Independent Carrier";
-                    
+
+                    // Dynamic Wi-Fi System Telemetry Architecture
                     let modelMatchKey = Object.keys(fleetConfigMap).find(key => flight.airplaneModelName && flight.airplaneModelName.includes(key)) || "Generic Commercial";
-                    let specsProfile = fleetConfigMap[modelMatchKey] || { layout: "Standard Seat Pitch", pitch: "Comfort configurations unmapped", config: "Commercial Core Liner" };
+                    let specsProfile = fleetConfigMap[modelMatchKey] || { layout: "Standard Seat Pitch", pitch: "Comfort configurations unmapped", config: "Commercial Core Liner", wifiGen: "Legacy Network", baseSpeed: "Limited Coverage" };
+
+                    let dynamicWifiSpeed = specsProfile.baseSpeed;
+                    let wifiStatus = "Wi-Fi Unavailable";
+                    if (rawFeatures.includes('WIFI') || qScore >= 50) {
+                        wifiStatus = `${specsProfile.wifiGen} Enabled (${dynamicWifiSpeed})`;
+                        if (qScore >= 80) wifiStatus += " • ⚡ High Priority Band";
+                    }
+
+                    // Dynamic Catering Menu Matrix Feature
+                    let cateringMenu = "Beverage Service Only";
+                    if (cabinClass !== 'economy') {
+                        cateringMenu = "🍱 Multi-course Premium Dining (À la carte)";
+                    } else if (durationMins > 240) {
+                        cateringMenu = "🍲 Complimentary Hot Meal Served";
+                    } else if (durationMins > 90) {
+                        cateringMenu = "🥪 Light Snacks & Sandwiches";
+                    }
 
                     const amenitiesList = [
                         { label: "Alliance Profile", val: allianceName },
-                        { label: "Cabin Grid", val: classLabelText },
-                        { label: "Fleet Type", val: `${flight.airplaneModelName || 'Commercial Jet'} (${specsProfile.config})` },
-                        { label: "Row Space / Layout", val: `${specsProfile.layout} • ${specsProfile.pitch}` },
-                        { label: "Wi-Fi Connectivity", val: calculatedWifi },
-                        { label: "Power & Entertainment", val: `${calculatedPower} • ${calculatedIfe}` }
+                        { label: "Cabin Class", val: classLabelText },
+                        { label: "Fleet Design Spec", val: `${flight.airplaneModelName || 'Commercial Jet'} (${specsProfile.config})` },
+                        { label: "Configuration Pitch", val: `${specsProfile.layout} • ${specsProfile.pitch}` },
+                        { label: "Dynamic Telemetry Wi-Fi", val: wifiStatus },
+                        { label: "In-Flight Catering Matrix", val: cateringMenu },
+                        { label: "Power & Outlets", val: (rawFeatures.includes('POWER_OUTLET') || cabinClass !== 'economy') ? "In-seat AC power outlets" : "No outlets available" }
                     ];
 
                     emissionsTotal += Math.round(durationMins * 4.2 * passengerCount);
 
                     combinedAmenitiesHtml += `
                         <div class="gf-detail-section">
-                            <div style="font-weight:bold; color:#60a5fa; margin-bottom:6px; font-size:12px;">Flight ${flight.flightCode || 'FLIGHT'} Specifications</div>
+                            <div style="font-weight:bold; color:#60a5fa; margin-bottom:6px; font-size:12px;">Flight ${flight.flightCode || 'FLIGHT'} Specifications Drawer</div>
                             ${amenitiesList.map(a => `
                                 <div class="gf-detail-row">
                                     <span class="gf-detail-label">${a.label}:</span>
@@ -906,7 +929,7 @@
         });
 
         if (rawNodes.length === 0 || !rawNodes[0].from) {
-            resultsBox.innerHTML = `<div style="color: #f59e0b; text-align: center; margin-top: 50px;">Please specify an origin hub.</div>`;
+            resultsBox.innerHTML = `<div style="color: #f59e0b; text-align: center; margin-top: 50px;">Please specify parameters.</div>`;
             return;
         }
 
@@ -915,7 +938,7 @@
 
         try {
             const resolvedFromId = lookupAirportId(rawNodes[0].from);
-            if (!resolvedFromId) throw new Error(`Could not resolve origin airport code [${rawNodes[0].from}]`);
+            if (!resolvedFromId) throw new Error(`Could not resolve airport origin: ${rawNodes[0].from}`);
 
             const targetToField = rawNodes[0].to;
             const isOpenSearch = !targetToField || targetToField === '*';
@@ -938,7 +961,7 @@
                 const completedDiscoveryArrays = await Promise.all(samplingPromises);
                 const validSectorsData = completedDiscoveryArrays.filter(data => data && data.length > 0);
 
-                if (validSectorsData.length === 0) throw new Error("No network discovery routing links found.");
+                if (validSectorsData.length === 0) throw new Error("No network discovery links discovered.");
 
                 let discoveredItineraries = [];
                 validSectorsData.forEach(sectorGroup => {
@@ -951,7 +974,7 @@
                     const legFromId = lookupAirportId(leg.from);
                     const legToId = lookupAirportId(leg.to);
 
-                    if (!legFromId || !legToId) throw new Error(`Could not resolve markers [From: ${leg.from} -> To: ${leg.to}]`);
+                    if (!legFromId || !legToId) throw new Error(`Could not resolve: ${leg.from} -> ${leg.to}`);
 
                     fetchPromises.push(fetch(`/search-route/${legFromId}/${legToId}`).then(res => {
                         if (!res.ok) throw new Error(`Segment mapping failed`);
@@ -966,8 +989,8 @@
             processAndRenderFilters();
 
         } catch (error) {
-            console.error("Search system crash intercepted:", error);
-            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">${error.message || 'Error parsing routes.'}</div>`;
+            console.error("Search system processing breakdown:", error);
+            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">${error.message || 'Error tracking routes.'}</div>`;
         }
     }
 
