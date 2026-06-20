@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v12.2)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v12.3)
 // @namespace    https://github.com/raid2256
-// @version      12.2
+// @version      12.3
 // @description  Google Flights style suite with exact-string airport resolution, three-tab category splitting, competition tracking metrics, allied interline surcharge calculations, airline market share monitoring, multi-ticket transfer safety matrices, Reverse-Route Open Discovery, Multi-Currency Conversion, Fleet details mapping, and Quick-Swap Route toggling.
 // @match        *://*.myfly.club/*
 // @grant        none
@@ -164,6 +164,12 @@
         return `${profile.symbol}${calculatedValue.toLocaleString()}`;
     }
 
+    function formatDuration(minutes) {
+        const h = Math.floor(minutes / 60);
+        const m = minutes % 60;
+        return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    }
+
     function getQualityTier(score) {
         if (score >= 80) return { text: `Excellent (${score/10}/10)`, class: 'q-excellent' };
         if (score >= 60) return { text: `Good (${score/10}/10)`, class: 'q-good' };
@@ -180,7 +186,7 @@
         return null;
     }
 
-    // Bug-Fixed Exact String Match Airport Resolver Engine
+    // Exact String Match Airport Resolver Engine
     function lookupAirportId(iata) {
         const cleanIata = String(iata).trim().toUpperCase();
         if (!isNaN(cleanIata) && cleanIata.length > 0) return parseInt(cleanIata); 
