@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v13.0)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v14.0)
 // @namespace    https://github.com/raid2256
-// @version      13.0
-// @description  Google Flights style suite with exact-string airport resolution, three-tab category splitting, competition tracking metrics, allied interline surcharge calculations, airline market share monitoring, multi-ticket transfer safety matrices, Multi-Currency Conversion Matrix, Layout Seat Pitch Drawer, Quick-Swap Routes, Reverse Discovery, Dynamic Wi-Fi telemetry, and In-Flight Catering Matrices.
+// @version      14.0
+// @description  Google Flights style aggregator with exact airport matching, custom tabs, allied interline rules, baggage engine, seat arrangement blueprints, popout space cloning, and adaptive single-carrier direct booking portal interfaces.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -16,6 +16,16 @@
     const todayStr = new Date().toISOString().split('T')[0];
     let compiledItineraries = [];
     let activeResultTab = 'best'; 
+    
+    // Portal Engine State Machine variables
+    let currentPortalMode = "G-FLIGHTS"; // Options: "G-FLIGHTS" or a specific airline name string
+    const carrierBrandMatrix = {
+        "SkyHigh": { primary: "#1e40af", secondary: "#1e1e24" },
+        "Magic Flight": { primary: "#6b21a8", secondary: "#1e1e24" },
+        "Dirt Cheap Airlines": { primary: "#b91c1c", secondary: "#1e1e24" },
+        "ALPHA": { primary: "#047857", secondary: "#1e1e24" },
+        "Delta": { primary: "#e11d48", secondary: "#1e1e24" }
+    };
 
     // Currency conversion mapping relative to base currency
     const currencyRates = {
@@ -61,7 +71,7 @@
             display: none; flex-direction: column; overflow: hidden;
             max-width: calc(100vw - 30px); max-height: calc(100vh - 30px);
         }
-        .gf-header { background: #1e1e24; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #27272a; flex-shrink: 0; cursor: move; user-select: none; }
+        .gf-header { background: #1e1e24; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #27272a; flex-shrink: 0; cursor: move; user-select: none; transition: background-color 0.3s ease; }
         .gf-title { font-weight: 700; color: #60a5fa; font-size: 15px; display: flex; align-items: center; gap: 6px; }
         .gf-close { background: none; border: none; color: #a1a1aa; cursor: pointer; font-size: 16px; font-weight: bold; }
         .gf-close:hover { color: #f4f4f5; }
@@ -148,6 +158,11 @@
         .p-low { color: #4ade80; } .p-mid { color: #facc15; } .p-high { color: #f87171; }
         .q-excellent { color: #4ade80; } .q-good { color: #a3e635; } .q-average { color: #facc15; } .q-poor { color: #fb923c; } .q-terrible { color: #f87171; }
 
+        .gf-popout-btn, .gf-portal-back-btn { background: #27272a; border: 1px solid #3f3f46; color: #e4e4e7; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+        .gf-popout-btn:hover, .gf-portal-back-btn:hover { background: #3f3f46; color: #ffffff; }
+        .gf-book-airline-btn { background: #2563eb; color: #ffffff; border: none; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; margin-top: 6px; align-self: flex-start; }
+        .gf-book-airline-btn:hover { background: #1d4ed8; }
+
         @media (max-width: 768px) {
             #g-flights-suite { width: 100vw; height: 90vh; top: 5vh; right: 0; left: 0; margin: auto; border-radius: 8px; }
             .gf-workspace { flex-direction: column; overflow-y: auto; }
@@ -171,7 +186,6 @@
         return h > 0 ? `${h}h ${m}m` : `${m}m`;
     }
 
-    // Explicit quality checker function definition
     function getQualityTier(score) {
         if (score >= 80) return { text: `Excellent (${score/10}/10)`, class: 'q-excellent' };
         if (score >= 60) return { text: `Good (${score/10}/10)`, class: 'q-good' };
@@ -188,7 +202,6 @@
         return null;
     }
 
-    // Bug-Fixed Exact String Match Airport Resolver Engine
     function lookupAirportId(iata) {
         const cleanIata = String(iata).trim().toUpperCase();
         if (!isNaN(cleanIata) && cleanIata.length > 0) return parseInt(cleanIata); 
@@ -221,7 +234,11 @@
     appContainer.innerHTML = `
         <div id="gf-draggable-header" class="gf-header">
             <span class="gf-title">✈️ Advanced Flight Search</span>
-            <button id="gf-close-window" class="gf-close">✕</button>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <button id="gf-portal-back-trigger" class="gf-portal-back-btn" style="display:none;">🔙 Back to G-Flights</button>
+                <button id="gf-popout-trigger" class="gf-popout-btn">↗️ Popout Space</button>
+                <button id="gf-close-window" class="gf-close">✕</button>
+            </div>
         </div>
         <div class="gf-controls">
             <div id="gf-legs-builder-box" class="gf-legs-builder">
@@ -373,10 +390,11 @@
     `;
     document.body.appendChild(appContainer);
 
-    // Swap tool trigger utility implementation
-    function bindSwapLogic(btnId, fromClass, toClass) {
-        document.getElementById(btnId).addEventListener('click', () => {
-            const row = document.getElementById(btnId).parentElement;
+    function bindSwapLogic(btnId, fromClass, toClass, contextDoc = document) {
+        const targetBtn = contextDoc.getElementById(btnId);
+        if (!targetBtn) return;
+        targetBtn.addEventListener('click', () => {
+            const row = targetBtn.parentElement;
             const fromInput = row.querySelector(fromClass);
             const toInput = row.querySelector(toClass);
             const temp = fromInput.value;
@@ -394,6 +412,22 @@
     document.getElementById('gf-close-window').addEventListener('click', () => {
         appContainer.style.display = 'none';
         toggleButton.style.display = 'flex';
+    });
+
+    // Back to Aggregator Event Logic
+    document.getElementById('gf-portal-back-trigger').addEventListener('click', () => {
+        currentPortalMode = "G-FLIGHTS";
+        const header = document.getElementById('gf-draggable-header');
+        const titleSpan = header.querySelector('.gf-title');
+        header.style.backgroundColor = '#1e1e24';
+        titleSpan.innerHTML = `✈️ Advanced Flight Search`;
+        document.getElementById('gf-portal-back-trigger').style.display = 'none';
+        
+        const filterInput = document.getElementById('gf-filter-airline');
+        filterInput.value = '';
+        filterInput.disabled = false;
+        
+        processAndRenderFilters();
     });
 
     function setTabActive(tabName) {
@@ -416,7 +450,7 @@
     let offsetX = 0, offsetY = 0;
 
     dragHeader.addEventListener('mousedown', (e) => {
-        if (e.target.closest('.gf-close') || window.innerWidth <= 768) return;
+        if (e.target.closest('.gf-close') || e.target.closest('#gf-popout-trigger') || e.target.closest('#gf-portal-back-trigger') || window.innerWidth <= 768) return;
         isDragging = true;
         offsetX = e.clientX - appContainer.offsetLeft;
         offsetY = e.clientY - appContainer.offsetTop;
@@ -436,6 +470,111 @@
         document.removeEventListener('mousemove', dragMove);
         document.removeEventListener('mouseup', stopDrag);
     }
+
+    // Window Popout Cloning Loop Engine
+    document.getElementById('gf-popout-trigger').addEventListener('click', () => {
+        const popWindow = window.open('', '_blank', 'width=960,height=860');
+        if (!popWindow) {
+            alert("Popup blocker active! Please allow popups to open workspace window.");
+            return;
+        }
+        
+        popWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Advanced Flight Console Workspace</title>
+                <style>
+                    body { background: #09090b; margin: 0; padding: 10px; font-family: system-ui, sans-serif; }
+                    #g-flights-suite { position: relative !important; top: 0 !important; right: 0 !important; left: 0 !important; display: flex !important; width: 100% !important; height: calc(100vh - 20px) !important; max-width: 100% !important; max-height: 100% !important; box-shadow: none !important; }
+                    #gf-popout-trigger, #gf-close-window { display: none !important; }
+                </style>
+            </head>
+            <body></body>
+            </html>
+        `);
+        popWindow.document.close();
+        
+        // Clone CSS styles across document boundaries
+        const originalStyles = document.getElementById('g-flights-styles');
+        if (originalStyles) {
+            popWindow.document.head.appendChild(originalStyles.cloneNode(true));
+        }
+        
+        // Teleport DOM block out of parent layout
+        appContainer.style.display = 'flex';
+        popWindow.document.body.appendChild(appContainer);
+        toggleButton.style.display = 'none';
+
+        // Re-bind all query handles to popout execution framework context
+        const popDoc = popWindow.document;
+        popDoc.getElementById('gf-submit-search').addEventListener('click', executeFlightSearch);
+        popDoc.getElementById('gf-filter-airline').addEventListener('input', processAndRenderFilters);
+        popDoc.getElementById('gf-filter-stops').addEventListener('change', processAndRenderFilters);
+        popDoc.getElementById('gf-filter-price').addEventListener('input', processAndRenderFilters);
+        popDoc.getElementById('gf-filter-class').addEventListener('change', processAndRenderFilters);
+        popDoc.getElementById('gf-filter-adults').addEventListener('change', processAndRenderFilters);
+        popDoc.getElementById('gf-filter-children').addEventListener('change', processAndRenderFilters);
+        popDoc.getElementById('gf-bag-carry').addEventListener('change', processAndRenderFilters);
+        popDoc.getElementById('gf-bag-checked').addEventListener('change', processAndRenderFilters);
+        popDoc.getElementById('gf-date-input').addEventListener('change', processAndRenderFilters);
+        popDoc.getElementById('gf-matrix-sort').addEventListener('change', processAndRenderFilters);
+        popDoc.getElementById('gf-currency-select').addEventListener('change', (e) => {
+            activeCurrency = e.target.value;
+            processAndRenderFilters();
+        });
+
+        popDoc.getElementById('gf-tab-best').addEventListener('click', () => setTabActive('best'));
+        popDoc.getElementById('gf-tab-cheapest').addEventListener('click', () => setTabActive('cheapest'));
+        popDoc.getElementById('gf-tab-other').addEventListener('click', () => setTabActive('other'));
+
+        popDoc.getElementById('gf-portal-back-trigger').addEventListener('click', () => {
+            currentPortalMode = "G-FLIGHTS";
+            const header = popDoc.getElementById('gf-draggable-header');
+            const titleSpan = header.querySelector('.gf-title');
+            header.style.backgroundColor = '#1e1e24';
+            titleSpan.innerHTML = `✈️ Advanced Flight Search`;
+            popDoc.getElementById('gf-portal-back-trigger').style.display = 'none';
+            
+            const filterInput = popDoc.getElementById('gf-filter-airline');
+            filterInput.value = '';
+            filterInput.disabled = false;
+            processAndRenderFilters();
+        });
+
+        popDoc.getElementById('gf-add-leg-trigger').addEventListener('click', () => {
+            const builderBox = popDoc.getElementById('gf-legs-builder-box');
+            const currentCount = builderBox.children.length;
+            const previousToVal = builderBox.lastElementChild.querySelector('.gf-loc-to').value.toUpperCase();
+
+            const newRow = popDoc.createElement('div');
+            newRow.className = 'gf-leg-builder-row';
+            newRow.setAttribute('data-leg-index', currentCount);
+            const uniqueBtnId = `gf-swap-trigger-${currentCount}`;
+            newRow.innerHTML = `
+                <div class="gf-input-group">
+                    <span class="gf-label">From</span>
+                    <input type="text" class="gf-input gf-loc-from" placeholder="e.g. LAX" value="${previousToVal}">
+                </div>
+                <button id="${uniqueBtnId}" class="gf-swap-btn">⇄</button>
+                <div class="gf-input-group">
+                    <span class="gf-label">To</span>
+                    <input type="text" class="gf-input gf-loc-to" placeholder="e.g. JFK">
+                </div>
+                <button class="gf-remove-leg-btn">✕</button>
+            `;
+            newRow.querySelector('.gf-remove-leg-btn').addEventListener('click', () => { newRow.remove(); });
+            builderBox.appendChild(newRow);
+            bindSwapLogic(uniqueBtnId, '.gf-loc-from', '.gf-loc-to', popDoc);
+        });
+
+        // Safe return fallback window tracking check loop
+        popWindow.addEventListener('beforeunload', () => {
+            document.body.appendChild(appContainer);
+            appContainer.style.display = 'none';
+            toggleButton.style.display = 'flex';
+        });
+    });
 
     document.getElementById('gf-add-leg-trigger').addEventListener('click', () => {
         const builderBox = document.getElementById('gf-legs-builder-box');
@@ -553,7 +692,15 @@
 
     function processAndRenderFilters() {
         const resultsBox = document.getElementById('gf-results-box');
-        const airlineQuery = document.getElementById('gf-filter-airline').value.toLowerCase();
+        
+        // Single Carrier Inventory Filter Switch Override
+        let airlineQuery = document.getElementById('gf-filter-airline').value.toLowerCase();
+        if (currentPortalMode !== "G-FLIGHTS") {
+            airlineQuery = currentPortalMode.toLowerCase();
+            document.getElementById('gf-filter-airline').value = currentPortalMode;
+            document.getElementById('gf-filter-airline').disabled = true;
+        }
+
         const maxStops = document.getElementById('gf-filter-stops').value;
         const maxPriceInput = parseFloat(document.getElementById('gf-filter-price').value) || Infinity;
         
@@ -628,8 +775,20 @@
             }
 
             if (airlineQuery) {
+                // Strict Codeshare Matching Loop Criteria
                 const matchesAirline = itinerary.legs.some(leg => 
-                    leg.some(flight => flight.airlineName.toLowerCase().includes(airlineQuery))
+                    leg.some(flight => {
+                        const directMatch = flight.airlineName.toLowerCase().includes(airlineQuery);
+                        let codeshareMatch = false;
+                        if (currentPortalMode !== "G-FLIGHTS") {
+                            const mainAlliance = getAirlineAlliance(currentPortalMode);
+                            const flightAlliance = getAirlineAlliance(flight.airlineName);
+                            if (mainAlliance && flightAlliance && mainAlliance === flightAlliance) {
+                                codeshareMatch = true;
+                            }
+                        }
+                        return directMatch || codeshareMatch;
+                    })
                 );
                 if (!matchesAirline) return;
             }
@@ -715,7 +874,7 @@
             card.className = 'gf-card';
             
             card.addEventListener('click', (e) => {
-                if (e.target.closest('.gf-details')) return;
+                if (e.target.closest('.gf-details') || e.target.closest('.gf-book-airline-btn')) return;
                 const detailsDrawer = card.querySelector('.gf-details');
                 if (detailsDrawer) detailsDrawer.classList.toggle('active');
             });
@@ -771,6 +930,9 @@
             }
             badgesHtml += competitionBadgeHtml;
 
+            // Extract the major validation carrier identity for layout rendering options
+            const dominantAirline = itinerary.legs[0]?.[0]?.airlineName || "Independent Carrier";
+
             itinerary.legs.forEach((legFlights, index) => {
                 totalStopsCount += (legFlights.length - 1);
                 legsHtml += `<div style="font-size: 11px; text-transform: uppercase; color: #3b82f6; font-weight: bold; margin-top: 6px;">Leg ${index + 1}</div>`;
@@ -807,7 +969,6 @@
 
                     const allianceName = getAirlineAlliance(flight.airlineName) || "Independent Carrier";
 
-                    // Dynamic Wi-Fi System Telemetry Architecture
                     let modelMatchKey = Object.keys(fleetConfigMap).find(key => flight.airplaneModelName && flight.airplaneModelName.includes(key)) || "Generic Commercial";
                     let specsProfile = fleetConfigMap[modelMatchKey] || { layout: "Standard Seat Pitch", pitch: "Comfort configurations unmapped", config: "Commercial Core Liner", wifiGen: "Legacy Network", baseSpeed: "Limited Coverage" };
 
@@ -818,7 +979,6 @@
                         if (qScore >= 80) wifiStatus += " • ⚡ High Priority Band";
                     }
 
-                    // Dynamic Catering Menu Matrix Feature
                     let cateringMenu = "Beverage Service Only";
                     if (cabinClass !== 'economy') {
                         cateringMenu = "🍱 Multi-course Premium Dining (À la carte)";
@@ -867,6 +1027,14 @@
                 });
             });
 
+            // Conditionally append direct airline branding link triggers
+            let actionPortalButtonHtml = '';
+            if (currentPortalMode === "G-FLIGHTS") {
+                actionPortalButtonHtml = `<button class="gf-book-airline-btn" data-airline-target="${dominantAirline}">🎫 Book Direct on ${dominantAirline}</button>`;
+            } else {
+                actionPortalButtonHtml = `<button class="gf-btn" style="height:24px; font-size:11px; padding:0 8px; margin-top:6px; background:#10b981;" onclick="alert('Itinerary Selected! Simulating direct checkout routing transaction framework...')">💳 Confirm Checkout Registration</button>`;
+            }
+
             card.innerHTML = `
                 <div class="gf-summary">
                     <span class="gf-price ${priceColorClass}">${formatPrice(finalCalculatedCost)} ${badgesHtml}</span>
@@ -874,6 +1042,7 @@
                     <span class="gf-stops">${totalStopsCount === 0 ? 'Nonstop Total' : totalStopsCount + ' Layovers'}</span>
                 </div>
                 <div class="gf-legs-container">${legsHtml}</div>
+                ${actionPortalButtonHtml}
                 <div class="gf-details">
                     ${combinedAmenitiesHtml}
                     <div class="gf-detail-section" style="border-top: 1px solid #3f3f46; margin-top: 4px; padding-top: 6px;">
@@ -882,6 +1051,28 @@
                     </div>
                 </div>
             `;
+            
+            // Re-bind click event hook handlers to airline redirect components
+            const portalBtn = card.querySelector('.gf-book-airline-btn');
+            if (portalBtn) {
+                portalBtn.addEventListener('click', () => {
+                    const targetAirline = portalBtn.getAttribute('data-airline-target');
+                    currentPortalMode = targetAirline;
+                    
+                    // Transition header design metrics dynamically inside current layout frame
+                    const contextDoc = card.ownerDocument || document;
+                    const header = contextDoc.getElementById('gf-draggable-header');
+                    const titleSpan = header.querySelector('.gf-title');
+                    const brandConfig = carrierBrandMatrix[targetAirline] || { primary: "#2563eb", secondary: "#1e1e24" };
+                    
+                    header.style.backgroundColor = brandConfig.primary;
+                    titleSpan.innerHTML = `🌐 ${targetAirline} Direct Booking Hub`;
+                    contextDoc.getElementById('gf-portal-back-trigger').style.display = 'inline-flex';
+                    
+                    processAndRenderFilters();
+                });
+            }
+
             resultsBox.appendChild(card);
         });
 
