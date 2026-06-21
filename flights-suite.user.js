@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v14.0)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v14.1)
 // @namespace    https://github.com/raid2256
-// @version      14.0
-// @description  Google Flights style aggregator with exact airport matching, custom tabs, allied interline rules, baggage engine, seat arrangement blueprints, popout space cloning, and adaptive single-carrier direct booking portal interfaces.
+// @version      14.1
+// @description  Google Flights style aggregator with exact airport matching, custom tabs, allied interline rules, baggage engine, seat arrangement blueprints, popout space cloning, and adaptive single-carrier direct booking portal interfaces with strict codeshare filtering and isolation rules.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -18,7 +18,7 @@
     let activeResultTab = 'best'; 
     
     // Portal Engine State Machine variables
-    let currentPortalMode = "G-FLIGHTS"; // Options: "G-FLIGHTS" or a specific airline name string
+    let currentPortalMode = "G-FLIGHTS"; 
     const carrierBrandMatrix = {
         "SkyHigh": { primary: "#1e40af", secondary: "#1e1e24" },
         "Magic Flight": { primary: "#6b21a8", secondary: "#1e1e24" },
@@ -162,6 +162,9 @@
         .gf-popout-btn:hover, .gf-portal-back-btn:hover { background: #3f3f46; color: #ffffff; }
         .gf-book-airline-btn { background: #2563eb; color: #ffffff; border: none; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; margin-top: 6px; align-self: flex-start; }
         .gf-book-airline-btn:hover { background: #1d4ed8; }
+        
+        .gf-airline-logo-badge { background: #ffffff; color: #111827; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 800; text-transform: uppercase; margin-right: 4px; display: inline-block; border: 1px solid #e5e7eb; }
+        .gf-codeshare-tag { color: #a1a1aa; font-size: 11px; font-style: italic; }
 
         @media (max-width: 768px) {
             #g-flights-suite { width: 100vw; height: 90vh; top: 5vh; right: 0; left: 0; margin: auto; border-radius: 8px; }
@@ -414,7 +417,7 @@
         toggleButton.style.display = 'flex';
     });
 
-    // Back to Aggregator Event Logic
+    // Reset Engine Portal Switcher Logic
     document.getElementById('gf-portal-back-trigger').addEventListener('click', () => {
         currentPortalMode = "G-FLIGHTS";
         const header = document.getElementById('gf-draggable-header');
@@ -495,18 +498,15 @@
         `);
         popWindow.document.close();
         
-        // Clone CSS styles across document boundaries
         const originalStyles = document.getElementById('g-flights-styles');
         if (originalStyles) {
             popWindow.document.head.appendChild(originalStyles.cloneNode(true));
         }
         
-        // Teleport DOM block out of parent layout
         appContainer.style.display = 'flex';
         popWindow.document.body.appendChild(appContainer);
         toggleButton.style.display = 'none';
 
-        // Re-bind all query handles to popout execution framework context
         const popDoc = popWindow.document;
         popDoc.getElementById('gf-submit-search').addEventListener('click', executeFlightSearch);
         popDoc.getElementById('gf-filter-airline').addEventListener('input', processAndRenderFilters);
@@ -568,7 +568,6 @@
             bindSwapLogic(uniqueBtnId, '.gf-loc-from', '.gf-loc-to', popDoc);
         });
 
-        // Safe return fallback window tracking check loop
         popWindow.addEventListener('beforeunload', () => {
             document.body.appendChild(appContainer);
             appContainer.style.display = 'none';
@@ -693,7 +692,6 @@
     function processAndRenderFilters() {
         const resultsBox = document.getElementById('gf-results-box');
         
-        // Single Carrier Inventory Filter Switch Override
         let airlineQuery = document.getElementById('gf-filter-airline').value.toLowerCase();
         if (currentPortalMode !== "G-FLIGHTS") {
             airlineQuery = currentPortalMode.toLowerCase();
@@ -775,7 +773,6 @@
             }
 
             if (airlineQuery) {
-                // Strict Codeshare Matching Loop Criteria
                 const matchesAirline = itinerary.legs.some(leg => 
                     leg.some(flight => {
                         const directMatch = flight.airlineName.toLowerCase().includes(airlineQuery);
@@ -930,8 +927,8 @@
             }
             badgesHtml += competitionBadgeHtml;
 
-            // Extract the major validation carrier identity for layout rendering options
             const dominantAirline = itinerary.legs[0]?.[0]?.airlineName || "Independent Carrier";
+            const firstLetterCode = dominantAirline.charAt(0).toUpperCase();
 
             itinerary.legs.forEach((legFlights, index) => {
                 totalStopsCount += (legFlights.length - 1);
@@ -1000,9 +997,15 @@
 
                     emissionsTotal += Math.round(durationMins * 4.2 * passengerCount);
 
+                    // Append Codeshare markers inside specifications window if flight matches via alliance profile
+                    let codeshareSubtitle = '';
+                    if (currentPortalMode !== "G-FLIGHTS" && flight.airlineName.toLowerCase() !== currentPortalMode.toLowerCase()) {
+                        codeshareSubtitle = ` <span class="gf-codeshare-tag">(Codeshare operated by ${flight.airlineName})</span>`;
+                    }
+
                     combinedAmenitiesHtml += `
                         <div class="gf-detail-section">
-                            <div style="font-weight:bold; color:#60a5fa; margin-bottom:6px; font-size:12px;">Flight ${flight.flightCode || 'FLIGHT'} Specifications Drawer</div>
+                            <div style="font-weight:bold; color:#60a5fa; margin-bottom:6px; font-size:12px;">Flight ${flight.flightCode || 'FLIGHT'} Specifications Drawer ${codeshareSubtitle}</div>
                             ${amenitiesList.map(a => `
                                 <div class="gf-detail-row">
                                     <span class="gf-detail-label">${a.label}:</span>
@@ -1019,7 +1022,7 @@
                                 <span>${formatPrice((flight.price * classMultiplier + (baggageSurchargeTotal / itinerary.legs.reduce((s, l) => s + l.length, 0))) * passengerCount)} ${badgeHtml}</span>
                             </div>
                             <div class="gf-leg-sub">
-                                <span>${flight.airlineName} • <i style="color: #a1a1aa;">${flight.airplaneModelName || 'Commercial Jet'}</i></span>
+                                <span><span class="gf-airline-logo-badge">${flight.airlineName.charAt(0)}</span> ${flight.airlineName} • <i style="color: #a1a1aa;">${flight.airplaneModelName || 'Commercial Jet'}</i></span>
                                 <span class="${qTier.class}" style="font-weight: 600;">${qTier.text}</span>
                             </div>
                         </div>
@@ -1027,12 +1030,14 @@
                 });
             });
 
-            // Conditionally append direct airline branding link triggers
+            // Action Booking Hub Logic overrides (Restricting multi-ticket split structures)
             let actionPortalButtonHtml = '';
             if (currentPortalMode === "G-FLIGHTS") {
-                actionPortalButtonHtml = `<button class="gf-book-airline-btn" data-airline-target="${dominantAirline}">🎫 Book Direct on ${dominantAirline}</button>`;
+                if (!wrapper.isSplitTicket) {
+                    actionPortalButtonHtml = `<button class="gf-book-airline-btn" data-airline-target="${dominantAirline}">🎫 Book Direct via ${dominantAirline}</button>`;
+                }
             } else {
-                actionPortalButtonHtml = `<button class="gf-btn" style="height:24px; font-size:11px; padding:0 8px; margin-top:6px; background:#10b981;" onclick="alert('Itinerary Selected! Simulating direct checkout routing transaction framework...')">💳 Confirm Checkout Registration</button>`;
+                actionPortalButtonHtml = `<div style="margin-top: 8px; font-size: 12px; font-weight: bold; color: #10b981; border: 1px dashed rgba(16, 185, 129, 0.4); padding: 6px; border-radius: 6px; display: inline-block;">✅ Total Portal Direct Fare: ${formatPrice(finalCalculatedCost)}</div>`;
             }
 
             card.innerHTML = `
@@ -1052,21 +1057,19 @@
                 </div>
             `;
             
-            // Re-bind click event hook handlers to airline redirect components
             const portalBtn = card.querySelector('.gf-book-airline-btn');
             if (portalBtn) {
                 portalBtn.addEventListener('click', () => {
                     const targetAirline = portalBtn.getAttribute('data-airline-target');
                     currentPortalMode = targetAirline;
                     
-                    // Transition header design metrics dynamically inside current layout frame
                     const contextDoc = card.ownerDocument || document;
                     const header = contextDoc.getElementById('gf-draggable-header');
                     const titleSpan = header.querySelector('.gf-title');
                     const brandConfig = carrierBrandMatrix[targetAirline] || { primary: "#2563eb", secondary: "#1e1e24" };
                     
                     header.style.backgroundColor = brandConfig.primary;
-                    titleSpan.innerHTML = `🌐 ${targetAirline} Direct Booking Hub`;
+                    titleSpan.innerHTML = `<span class="gf-airline-logo-badge" style="background:#fff; color:#111827; margin-right:6px; padding:2px 6px;">${firstLetterCode}</span> ${targetAirline} Direct Booking Hub`;
                     contextDoc.getElementById('gf-portal-back-trigger').style.display = 'inline-flex';
                     
                     processAndRenderFilters();
