@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v14.1)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v14.2)
 // @namespace    https://github.com/raid2256
-// @version      14.1
-// @description  Google Flights style aggregator with exact airport matching, custom tabs, allied interline rules, baggage engine, seat arrangement blueprints, popout space cloning, and adaptive single-carrier direct booking portal interfaces with strict codeshare filtering and isolation rules.
+// @version      14.2
+// @description  Google Flights style aggregator with exact airport matching, custom tabs, allied interline rules, explicit carrier type directories, flight departure/arrival timelines, on-demand monitor matrices, popout space cloning, and adaptive single-carrier direct booking portal layouts.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -19,12 +19,17 @@
     
     // Portal Engine State Machine variables
     let currentPortalMode = "G-FLIGHTS"; 
-    const carrierBrandMatrix = {
-        "SkyHigh": { primary: "#1e40af", secondary: "#1e1e24" },
-        "Magic Flight": { primary: "#6b21a8", secondary: "#1e1e24" },
-        "Dirt Cheap Airlines": { primary: "#b91c1c", secondary: "#1e1e24" },
-        "ALPHA": { primary: "#047857", secondary: "#1e1e24" },
-        "Delta": { primary: "#e11d48", secondary: "#1e1e24" }
+    
+    // Explicit Carrier Category and Branding Registry Configuration
+    const carrierRegistry = {
+        "Dirt Cheap Airlines": { category: "LCC", primaryColor: "#b91c1c" },
+        "Avelo": { category: "LCC", primaryColor: "#0ea5e9" },
+        "RyanAir Group": { category: "LCC", primaryColor: "#2563eb" },
+        "SkyHigh": { category: "LEGACY", primaryColor: "#1e40af" },
+        "Delta": { category: "LEGACY", primaryColor: "#e11d48" },
+        "Majestic Air": { category: "LEGACY", primaryColor: "#4338ca" },
+        "Oiligarch Transport Services": { category: "PREMIUM", primaryColor: "#111827" },
+        "EuroElites": { category: "PREMIUM", primaryColor: "#1e293b" }
     };
 
     // Currency conversion mapping relative to base currency
@@ -38,12 +43,12 @@
 
     // Fleet configurations database
     const fleetConfigMap = {
-        "Boeing 777": { layout: "3-4-3 Arrangement", pitch: "31-32\" Standard Economy", config: "Wide-body Twin Jet", wifiGen: "Satellite Ka-Band", baseSpeed: "Up to 100 Mbps" },
-        "Boeing 787": { layout: "3-3-3 Arrangement", pitch: "32\" Dreamliner Standard", config: "High-Efficiency Wide-body", wifiGen: "Satellite Ku-Band", baseSpeed: "Up to 50 Mbps" },
-        "Airbus A350": { layout: "3-3-3 Arrangement", pitch: "32-33\" Extra Wide Ergonomics", config: "Advanced Composite Wide-body", wifiGen: "Next-Gen Ka-Band", baseSpeed: "Up to 150 Mbps" },
-        "Airbus A320": { layout: "3-3 Arrangement", pitch: "30\" Short-Haul Standard", config: "Narrow-body Single Aisle", wifiGen: "Air-to-Ground 4G", baseSpeed: "Up to 15 Mbps" },
-        "Boeing 737": { layout: "3-3 Arrangement", pitch: "30-31\" Single Aisle", config: "Narrow-body Standard", wifiGen: "Satellite Ku-Band", baseSpeed: "Up to 40 Mbps" },
-        "Airbus A380": { layout: "3-4-3 Lower / 2-4-2 Upper", pitch: "32-34\" Double Decker Spacing", config: "Ultra-Large Quad Jet Superjumbo", wifiGen: "Dual-Band Satellite", baseSpeed: "Up to 80 Mbps" }
+        "Boeing 777": { layout: "3-4-3 Arrangement", pitch: "31-32\" Standard Economy", config: "Wide-body Twin Jet", wifiGen: "Satellite Ka-Band", baseSpeed: "Up to 100 Mbps", screenDef: "11-inch HD Touchscreen" },
+        "Boeing 787": { layout: "3-3-3 Arrangement", pitch: "32\" Dreamliner Standard", config: "High-Efficiency Wide-body", wifiGen: "Satellite Ku-Band", baseSpeed: "Up to 50 Mbps", screenDef: "12-inch Smart Screen" },
+        "Airbus A350": { layout: "3-3-3 Arrangement", pitch: "32-33\" Extra Wide Ergonomics", config: "Advanced Composite Wide-body", wifiGen: "Next-Gen Ka-Band", baseSpeed: "Up to 150 Mbps", screenDef: "13-inch Ultra-HD Screen" },
+        "Airbus A320": { layout: "3-3 Arrangement", pitch: "30\" Short-Haul Standard", config: "Narrow-body Single Aisle", wifiGen: "Air-to-Ground 4G", baseSpeed: "Up to 15 Mbps", screenDef: "Streaming Content to Personal Device" },
+        "Boeing 737": { layout: "3-3 Arrangement", pitch: "30-31\" Single Aisle", config: "Narrow-body Standard", wifiGen: "Satellite Ku-Band", baseSpeed: "Up to 40 Mbps", screenDef: "Overhead Shared Monitors" },
+        "Airbus A380": { layout: "3-4-3 Lower / 2-4-2 Upper", pitch: "32-34\" Double Decker Spacing", config: "Ultra-Large Quad Jet Superjumbo", wifiGen: "Dual-Band Satellite", baseSpeed: "Up to 80 Mbps", screenDef: "11.5-inch Personal IFE System" }
     };
 
     // Full Alliance Matrix for interlining and dynamic surcharge mapping
@@ -127,8 +132,9 @@
         .gf-legs-container { display: flex; flex-direction: column; gap: 6px; }
         .gf-leg { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: #141416; border-radius: 6px; border-left: 3px solid #3b82f6; }
         .gf-leg.split-ticket-segment { border-left-color: #a855f7; }
-        .gf-leg-title { font-size: 13px; font-weight: 600; color: #f4f4f5; display: flex; justify-content: space-between; }
+        .gf-leg-title { font-size: 13px; font-weight: 600; color: #f4f4f5; display: flex; justify-content: space-between; align-items: center; }
         .gf-leg-sub { font-size: 11px; color: #71717a; display: flex; justify-content: space-between; align-items: center; }
+        .gf-timeline { font-size: 12px; font-weight: bold; color: #fbbf24; margin-bottom: 2px; }
         
         .gf-details { display: none; background: #141416; padding: 12px; border-radius: 8px; font-size: 12px; color: #d4d4d8; border: 1px solid #27272a; flex-direction: column; gap: 8px; margin-top: 4px; cursor: default; }
         .gf-details.active { display: flex; }
@@ -187,6 +193,17 @@
         const h = Math.floor(minutes / 60);
         const m = minutes % 60;
         return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    }
+
+    // Mathematical parser to convert timestamp indices into clean AM/PM text rows
+    function formatTimeValue(rawMinutes) {
+        let cleanMinutes = Math.floor(rawMinutes) % 1440;
+        let hours = Math.floor(cleanMinutes / 60);
+        let mins = cleanMinutes % 60;
+        let period = hours >= 12 ? "PM" : "AM";
+        let displayHours = hours % 12 === 0 ? 12 : hours % 12;
+        let displayMins = mins < 10 ? "0" + mins : mins;
+        return `${displayHours}:${displayMins} ${period}`;
     }
 
     function getQualityTier(score) {
@@ -937,6 +954,13 @@
                 legFlights.forEach((flight, fIndex) => {
                     let segmentIsSplit = fIndex > 0 && legFlights[fIndex - 1].airlineName !== flight.airlineName;
                     
+                    // Restored explicit Departure and Arrival calculations
+                    let departureTimeRaw = flight.departure || (480 + (index * 180) + (fIndex * 90));
+                    let arrivalTimeRaw = flight.arrival || (departureTimeRaw + (flight.duration || 120));
+                    
+                    let departureTimeString = formatTimeValue(departureTimeRaw);
+                    let arrivalTimeString = formatTimeValue(arrivalTimeRaw);
+
                     if (fIndex > 0) {
                         const prevFlight = legFlights[fIndex - 1];
                         const layoverTime = flight.departure - prevFlight.arrival;
@@ -967,13 +991,22 @@
                     const allianceName = getAirlineAlliance(flight.airlineName) || "Independent Carrier";
 
                     let modelMatchKey = Object.keys(fleetConfigMap).find(key => flight.airplaneModelName && flight.airplaneModelName.includes(key)) || "Generic Commercial";
-                    let specsProfile = fleetConfigMap[modelMatchKey] || { layout: "Standard Seat Pitch", pitch: "Comfort configurations unmapped", config: "Commercial Core Liner", wifiGen: "Legacy Network", baseSpeed: "Limited Coverage" };
+                    let specsProfile = fleetConfigMap[modelMatchKey] || { layout: "Standard Seat Pitch", pitch: "Comfort configurations unmapped", config: "Commercial Core Liner", wifiGen: "Legacy Network", baseSpeed: "Limited Coverage", screenDef: "No Screen" };
 
                     let dynamicWifiSpeed = specsProfile.baseSpeed;
                     let wifiStatus = "Wi-Fi Unavailable";
                     if (rawFeatures.includes('WIFI') || qScore >= 50) {
                         wifiStatus = `${specsProfile.wifiGen} Enabled (${dynamicWifiSpeed})`;
                         if (qScore >= 80) wifiStatus += " • ⚡ High Priority Band";
+                    }
+
+                    // On-Demand Entertainment Monitor Telemetry System Detector Logic
+                    let monitorStatus = specsProfile.screenDef;
+                    const targetProfile = carrierRegistry[flight.airlineName] || { category: "LEGACY" };
+                    if (targetProfile.category === "PREMIUM" || cabinClass === "first" || cabinClass === "business") {
+                        monitorStatus = "15.6-inch Ultra-HD Touchscreen On-Demand Monitor (Complimentary Live TV + Streaming)";
+                    } else if (targetProfile.category === "LCC") {
+                        monitorStatus = "Bring Your Own Device (No seatback monitor installed. USB streaming enabled)";
                     }
 
                     let cateringMenu = "Beverage Service Only";
@@ -990,6 +1023,7 @@
                         { label: "Cabin Class", val: classLabelText },
                         { label: "Fleet Design Spec", val: `${flight.airplaneModelName || 'Commercial Jet'} (${specsProfile.config})` },
                         { label: "Configuration Pitch", val: `${specsProfile.layout} • ${specsProfile.pitch}` },
+                        { label: "On-Demand Monitor Matrix", val: monitorStatus },
                         { label: "Dynamic Telemetry Wi-Fi", val: wifiStatus },
                         { label: "In-Flight Catering Matrix", val: cateringMenu },
                         { label: "Power & Outlets", val: (rawFeatures.includes('POWER_OUTLET') || cabinClass !== 'economy') ? "In-seat AC power outlets" : "No outlets available" }
@@ -997,7 +1031,6 @@
 
                     emissionsTotal += Math.round(durationMins * 4.2 * passengerCount);
 
-                    // Append Codeshare markers inside specifications window if flight matches via alliance profile
                     let codeshareSubtitle = '';
                     if (currentPortalMode !== "G-FLIGHTS" && flight.airlineName.toLowerCase() !== currentPortalMode.toLowerCase()) {
                         codeshareSubtitle = ` <span class="gf-codeshare-tag">(Codeshare operated by ${flight.airlineName})</span>`;
@@ -1017,8 +1050,9 @@
 
                     legsHtml += `
                         <div class="gf-leg ${segmentIsSplit ? 'split-ticket-segment' : ''}">
+                            <div class="gf-timeline">⏰ Depart: ${departureTimeString} (${flight.fromAirportIata}) ➔ Arrive: ${arrivalTimeString} (${flight.toAirportIata})</div>
                             <div class="gf-leg-title">
-                                <span>✈️ ${flight.flightCode || 'FLIGHT'} (${flight.fromAirportIata} ➔ ${flight.toAirportIata})</span>
+                                <span>✈️ ${flight.flightCode || 'FLIGHT'}</span>
                                 <span>${formatPrice((flight.price * classMultiplier + (baggageSurchargeTotal / itinerary.legs.reduce((s, l) => s + l.length, 0))) * passengerCount)} ${badgeHtml}</span>
                             </div>
                             <div class="gf-leg-sub">
@@ -1030,7 +1064,6 @@
                 });
             });
 
-            // Action Booking Hub Logic overrides (Restricting multi-ticket split structures)
             let actionPortalButtonHtml = '';
             if (currentPortalMode === "G-FLIGHTS") {
                 if (!wrapper.isSplitTicket) {
@@ -1066,10 +1099,12 @@
                     const contextDoc = card.ownerDocument || document;
                     const header = contextDoc.getElementById('gf-draggable-header');
                     const titleSpan = header.querySelector('.gf-title');
-                    const brandConfig = carrierBrandMatrix[targetAirline] || { primary: "#2563eb", secondary: "#1e1e24" };
                     
-                    header.style.backgroundColor = brandConfig.primary;
-                    titleSpan.innerHTML = `<span class="gf-airline-logo-badge" style="background:#fff; color:#111827; margin-right:6px; padding:2px 6px;">${firstLetterCode}</span> ${targetAirline} Direct Booking Hub`;
+                    // Pull specific primary category color mapping configuration from directory profile
+                    const carrierData = carrierRegistry[targetAirline] || { category: "LEGACY", primaryColor: "#1e40af" };
+                    
+                    header.style.backgroundColor = carrierData.primaryColor;
+                    titleSpan.innerHTML = `<span class="gf-airline-logo-badge" style="background:#fff; color:#111827; margin-right:6px; padding:2px 6px;">${firstLetterCode}</span> ${targetAirline} Direct Booking Hub [Category: ${carrierData.category}]`;
                     contextDoc.getElementById('gf-portal-back-trigger').style.display = 'inline-flex';
                     
                     processAndRenderFilters();
