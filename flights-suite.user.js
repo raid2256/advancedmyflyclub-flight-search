@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v14.3)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v15.0)
 // @namespace    https://github.com/raid2256
-// @version      14.3
-// @description  Google Flights style aggregator with exact airport matching, allied interline engines, explicit carrier registries, flight departure/arrival timelines, on-demand monitor matrices, and an advanced integrated Product Service & Equipment (PSE) Quality Index framework.
+// @version      15.0
+// @description  Google Flights style aggregator with exact airport matching, allied interline engines, explicit carrier registries, flight departure/arrival timelines, on-demand monitor matrices, an advanced integrated Product Service & Equipment (PSE) Quality Index framework, and an active popout Telemetry Map Canvas.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -16,11 +16,23 @@
     const todayStr = new Date().toISOString().split('T')[0];
     let compiledItineraries = [];
     let activeResultTab = 'best'; 
-    
-    // Portal Engine State Machine variables
     let currentPortalMode = "G-FLIGHTS"; 
-    
-    // Explicit Carrier Category and Branding Registry Configuration
+    let activeMapWindow = null;
+    let selectedItineraryIndex = null;
+
+    // Geographic Coordinates Lookup Registry for Great-Circle Vector Simulation
+    const geoCoordinateRegistry = {
+        "KHI": { lat: 24.9065, lng: 67.1608, x: 620, y: 440 },
+        "ISB": { lat: 33.5486, lng: 72.8258, x: 635, y: 410 },
+        "JFK": { lat: 40.6413, lng: -73.7781, x: 240, y: 360 },
+        "DXB": { lat: 25.2532, lng: 55.3657, x: 580, y: 435 },
+        "SYD": { lat: -33.9461, lng: 151.1772, x: 840, y: 680 },
+        "HNL": { lat: 21.3186, lng: -157.9225, x: 80, y: 415 },
+        "LAX": { lat: 33.9416, lng: -118.4085, x: 160, y: 380 },
+        "ORD": { lat: 41.9742, lng: -87.9073, x: 210, y: 355 },
+        "LHR": { lat: 51.4700, lng: -0.4543, x: 460, y: 310 }
+    };
+
     const carrierRegistry = {
         "Dirt Cheap Airlines": { category: "LCC", primaryColor: "#b91c1c" },
         "Avelo": { category: "LCC", primaryColor: "#0ea5e9" },
@@ -32,7 +44,6 @@
         "EuroElites": { category: "PREMIUM", primaryColor: "#1e293b" }
     };
 
-    // Currency conversion mapping relative to base currency
     const currencyRates = {
         "USD": { symbol: "$", rate: 1.0 },
         "EUR": { symbol: "€", rate: 0.92 },
@@ -41,7 +52,6 @@
     };
     let activeCurrency = "USD";
 
-    // Fleet configurations database
     const fleetConfigMap = {
         "Boeing 777": { layout: "3-4-3 Arrangement", pitch: "31-32\" Standard Economy", config: "Wide-body Twin Jet", wifiGen: "Satellite Ka-Band", baseSpeed: "Up to 100 Mbps", screenDef: "11-inch HD Touchscreen", baseDensity: 82 },
         "Boeing 787": { layout: "3-3-3 Arrangement", pitch: "32\" Dreamliner Standard", config: "High-Efficiency Wide-body", wifiGen: "Satellite Ku-Band", baseSpeed: "Up to 50 Mbps", screenDef: "12-inch Smart Screen", baseDensity: 74 },
@@ -51,7 +61,6 @@
         "Airbus A380": { layout: "3-4-3 Lower / 2-4-2 Upper", pitch: "32-34\" Double Decker Spacing", config: "Ultra-Large Quad Jet Superjumbo", wifiGen: "Dual-Band Satellite", baseSpeed: "Up to 80 Mbps", screenDef: "11.5-inch Personal IFE System", baseDensity: 65 }
     };
 
-    // Full Alliance Matrix for interlining and dynamic surcharge mapping
     const allianceMap = {
         "Animals": ["Fox and Friends", "Cats", "The Panda", "Shiba", "Narwhal", "Dragon", "Goblins"],
         "Come To Brasil": ["Logic Air", "CityJet", "Global Connect", "Global Express", "Gondor Air", "Mordor Air", "Chungking Express"],
@@ -125,6 +134,7 @@
         .gf-results { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
         .gf-card { background: #1e1e24; border: 1px solid #27272a; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; transition: background 0.2s; }
         .gf-card:hover { background: #24242b; border-color: #3f3f46; }
+        .gf-card.gf-card-selected { border-color: #3b82f6; background: #202028; box-shadow: 0 0 10px rgba(59, 130, 246, 0.2); }
         .gf-summary { display: flex; justify-content: space-between; align-items: center; }
         .gf-price { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
         .gf-stops { font-size: 12px; color: #a1a1aa; background: #27272a; padding: 2px 8px; border-radius: 20px; }
@@ -243,6 +253,19 @@
         return null;
     }
 
+    function lookupGeoPixelCoordinates(iata) {
+        const cleanIata = String(iata).trim().toUpperCase();
+        if (geoCoordinateRegistry[cleanIata]) return geoCoordinateRegistry[cleanIata];
+        
+        let hash = 0;
+        for (let i = 0; i < cleanIata.length; i++) {
+            hash = cleanIata.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const pseudoX = 200 + (Math.abs(hash) % 600);
+        const pseudoY = 150 + (Math.abs(hash >> 3) % 400);
+        return { lat: 0, lng: 0, x: pseudoX, y: pseudoY };
+    }
+
     const toggleButton = document.createElement('div');
     toggleButton.id = 'gf-toggle-handle';
     toggleButton.innerHTML = `<span>🌐</span> Open Advanced Flight Search`;
@@ -255,7 +278,7 @@
             <span class="gf-title">✈️ Advanced Flight Search</span>
             <div style="display:flex; align-items:center; gap:8px;">
                 <button id="gf-portal-back-trigger" class="gf-portal-back-btn" style="display:none;">🔙 Back to G-Flights</button>
-                <button id="gf-popout-trigger" class="gf-popout-btn">↗️ Popout Space</button>
+                <button id="gf-popout-trigger" class="gf-popout-btn">↗️ Popout Map</button>
                 <button id="gf-close-window" class="gf-close">✕</button>
             </div>
         </div>
@@ -433,7 +456,6 @@
         toggleButton.style.display = 'flex';
     });
 
-    // Reset Engine Portal Switcher Logic
     document.getElementById('gf-portal-back-trigger').addEventListener('click', () => {
         currentPortalMode = "G-FLIGHTS";
         const header = document.getElementById('gf-draggable-header');
@@ -490,219 +512,132 @@
         document.removeEventListener('mouseup', stopDrag);
     }
 
-    // Window Popout Cloning Loop Engine
+    // Bidirectional Map Workspace Popout System
     document.getElementById('gf-popout-trigger').addEventListener('click', () => {
-        const popWindow = window.open('', '_blank', 'width=960,height=860');
-        if (!popWindow) {
-            alert("Popup blocker active! Please allow popups to open workspace window.");
+        if (activeMapWindow && !activeMapWindow.closed) {
+            activeMapWindow.focus();
             return;
         }
-        
-        popWindow.document.write(`
+
+        activeMapWindow = window.open('', '_blank', 'width=1020,height=760');
+        if (!activeMapWindow) {
+            alert("Popup blocker active! Please allow popups to open workspace map window.");
+            return;
+        }
+
+        activeMapWindow.document.write(`
             <!DOCTYPE html>
             <html>
             <head>
-                <title>Advanced Flight Console Workspace</title>
+                <title>Live Route Telemetry Visualizer</title>
                 <style>
-                    body { background: #09090b; margin: 0; padding: 10px; font-family: system-ui, sans-serif; }
-                    #g-flights-suite { position: relative !important; top: 0 !important; right: 0 !important; left: 0 !important; display: flex !important; width: 100% !important; height: calc(100vh - 20px) !important; max-width: 100% !important; max-height: 100% !important; box-shadow: none !important; }
-                    #gf-popout-trigger, #gf-close-window { display: none !important; }
+                    body { margin: 0; padding: 0; background: #09090b; color: #e4e4e7; font-family: system-ui, sans-serif; overflow: hidden; }
+                    #map-canvas { display: block; background: #111115; width: 100vw; height: 100vh; }
+                    .hud-panel { position: absolute; top: 15px; left: 15px; background: rgba(24, 24, 27, 0.9); padding: 14px; border: 1px solid #27272a; border-radius: 8px; max-width: 320px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); pointer-events: none; }
+                    .hud-title { font-size: 13px; font-weight: bold; color: #60a5fa; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+                    .hud-meta { font-size: 11px; color: #a1a1aa; margin-top: 4px; line-height: 1.4; }
                 </style>
             </head>
-            <body></body>
+            <body>
+                <div class="hud-panel">
+                    <div class="hud-title">🌐 Tactical Route Engine</div>
+                    <div id="hud-status" style="font-size: 12px; color: #f4f4f5; font-weight: 600;">System Standby</div>
+                    <div id="hud-body" class="hud-meta">Click any option card in the main search results dashboard sidebar to map its tracking vector arcs.</div>
+                </div>
+                <canvas id="map-canvas" width="1020" height="760"></canvas>
+            </body>
             </html>
         `);
-        popWindow.document.close();
-        
-        const originalStyles = document.getElementById('g-flights-styles');
-        if (originalStyles) {
-            popWindow.document.head.appendChild(originalStyles.cloneNode(true));
-        }
-        
-        appContainer.style.display = 'flex';
-        popWindow.document.body.appendChild(appContainer);
-        toggleButton.style.display = 'none';
+        activeMapWindow.document.close();
 
-        const popDoc = popWindow.document;
-        popDoc.getElementById('gf-submit-search').addEventListener('click', executeFlightSearch);
-        popDoc.getElementById('gf-filter-airline').addEventListener('input', processAndRenderFilters);
-        popDoc.getElementById('gf-filter-stops').addEventListener('change', processAndRenderFilters);
-        popDoc.getElementById('gf-filter-price').addEventListener('input', processAndRenderFilters);
-        popDoc.getElementById('gf-filter-class').addEventListener('change', processAndRenderFilters);
-        popDoc.getElementById('gf-filter-adults').addEventListener('change', processAndRenderFilters);
-        popDoc.getElementById('gf-filter-children').addEventListener('change', processAndRenderFilters);
-        popDoc.getElementById('gf-bag-carry').addEventListener('change', processAndRenderFilters);
-        popDoc.getElementById('gf-bag-checked').addEventListener('change', processAndRenderFilters);
-        popDoc.getElementById('gf-date-input').addEventListener('change', processAndRenderFilters);
-        popDoc.getElementById('gf-matrix-sort').addEventListener('change', processAndRenderFilters);
-        popDoc.getElementById('gf-currency-select').addEventListener('change', (e) => {
-            activeCurrency = e.target.value;
-            processAndRenderFilters();
+        activeMapWindow.addEventListener('beforeunload', () => {
+            activeMapWindow = null;
         });
 
-        popDoc.getElementById('gf-tab-best').addEventListener('click', () => setTabActive('best'));
-        popDoc.getElementById('gf-tab-cheapest').addEventListener('click', () => setTabActive('cheapest'));
-        popDoc.getElementById('gf-tab-other').addEventListener('click', () => setTabActive('other'));
-
-        popDoc.getElementById('gf-portal-back-trigger').addEventListener('click', () => {
-            currentPortalMode = "G-FLIGHTS";
-            const header = popDoc.getElementById('gf-draggable-header');
-            const titleSpan = header.querySelector('.gf-title');
-            header.style.backgroundColor = '#1e1e24';
-            titleSpan.innerHTML = `✈️ Advanced Flight Search`;
-            popDoc.getElementById('gf-portal-back-trigger').style.display = 'none';
-            
-            const filterInput = popDoc.getElementById('gf-filter-airline');
-            filterInput.value = '';
-            filterInput.disabled = false;
-            processAndRenderFilters();
-        });
-
-        popDoc.getElementById('gf-add-leg-trigger').addEventListener('click', () => {
-            const builderBox = popDoc.getElementById('gf-legs-builder-box');
-            const currentCount = builderBox.children.length;
-            const previousToVal = builderBox.lastElementChild.querySelector('.gf-loc-to').value.toUpperCase();
-
-            const newRow = popDoc.createElement('div');
-            newRow.className = 'gf-leg-builder-row';
-            newRow.setAttribute('data-leg-index', currentCount);
-            const uniqueBtnId = `gf-swap-trigger-${currentCount}`;
-            newRow.innerHTML = `
-                <div class="gf-input-group">
-                    <span class="gf-label">From</span>
-                    <input type="text" class="gf-input gf-loc-from" placeholder="e.g. LAX" value="${previousToVal}">
-                </div>
-                <button id="${uniqueBtnId}" class="gf-swap-btn">⇄</button>
-                <div class="gf-input-group">
-                    <span class="gf-label">To</span>
-                    <input type="text" class="gf-input gf-loc-to" placeholder="e.g. JFK">
-                </div>
-                <button class="gf-remove-leg-btn">✕</button>
-            `;
-            newRow.querySelector('.gf-remove-leg-btn').addEventListener('click', () => { newRow.remove(); });
-            builderBox.appendChild(newRow);
-            bindSwapLogic(uniqueBtnId, '.gf-loc-from', '.gf-loc-to', popDoc);
-        });
-
-        popWindow.addEventListener('beforeunload', () => {
-            document.body.appendChild(appContainer);
-            appContainer.style.display = 'none';
-            toggleButton.style.display = 'flex';
-        });
+        drawMapWorkspaceContext();
     });
 
-    document.getElementById('gf-add-leg-trigger').addEventListener('click', () => {
-        const builderBox = document.getElementById('gf-legs-builder-box');
-        const currentCount = builderBox.children.length;
-        const previousToVal = builderBox.lastElementChild.querySelector('.gf-loc-to').value.toUpperCase();
+    function drawMapWorkspaceContext(targetItinerary = null) {
+        if (!activeMapWindow || activeMapWindow.closed) return;
 
-        const newRow = document.createElement('div');
-        newRow.className = 'gf-leg-builder-row';
-        newRow.setAttribute('data-leg-index', currentCount);
-        const uniqueBtnId = `gf-swap-trigger-${currentCount}`;
-        newRow.innerHTML = `
-            <div class="gf-input-group">
-                <span class="gf-label">From</span>
-                <input type="text" class="gf-input gf-loc-from" placeholder="e.g. LAX" value="${previousToVal}">
-            </div>
-            <button id="${uniqueBtnId}" class="gf-swap-btn">⇄</button>
-            <div class="gf-input-group">
-                <span class="gf-label">To</span>
-                <input type="text" class="gf-input gf-loc-to" placeholder="e.g. JFK">
-            </div>
-            <button class="gf-remove-leg-btn">✕</button>
-        `;
-        newRow.querySelector('.gf-remove-leg-btn').addEventListener('click', () => { newRow.remove(); });
-        builderBox.appendChild(newRow);
-        bindSwapLogic(uniqueBtnId, '.gf-loc-from', '.gf-loc-to');
-    });
+        const canvas = activeMapWindow.document.getElementById('map-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const hudStatus = activeMapWindow.document.getElementById('hud-status');
+        const hudBody = activeMapWindow.document.getElementById('hud-body');
 
-    const dynamicGeoDirectory = {
-        "SYD": { attractions: ["Sydney Opera House", "Bondi Beach", "Sydney Harbour Bridge", "Darling Harbour"], hotels: ["Capella Sydney ($747/nt)", "Four Seasons Hotel Sydney ($390/nt)"] },
-        "DXB": { attractions: ["Burj Khalifa Tower", "The Dubai Mall", "Dubai Miracle Garden"], hotels: ["Dubai International Hotel ($240/nt)", "Le Méridien Dubai ($185/nt)"] },
-        "JFK": { attractions: ["Times Square", "Central Park Waterfront", "Empire State Building"], hotels: ["The Plaza Hotel ($680/nt)", "TWA Hotel JFK Airport ($245/nt)"] },
-        "ISB": { attractions: ["Faisal Mosque Landmark", "Margalla Hills Drive", "Lok Virsa Cultural Museum"], hotels: ["The Islamabad Serena Palace ($280/nt)", "Margalla View Executive Suites ($115/nt)"] },
-        "HNL": { attractions: ["Waikiki Beachfront Strip", "Diamond Head Crater Path", "Pearl Harbor Memorial Site"], hotels: ["The Royal Hawaiian Resort ($410/nt)", "Hilton Hawaiian Village ($295/nt)"] }
-    };
+        ctx.clearRect(0, 0, 1020, 760);
 
-    function computeMarketDominance(qualifiedGroup) {
-        const dominanceBox = document.getElementById('gf-dominance-box');
-        if (!qualifiedGroup || qualifiedGroup.length === 0) {
-            dominanceBox.innerHTML = `<span style="font-size:11px; color:#71717a;">No market data.</span>`;
+        // Render base background network grid constellation dots
+        ctx.fillStyle = '#27272a';
+        Object.entries(geoCoordinateRegistry).forEach(([iata, pos]) => {
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, 3, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.font = '9px sans-serif';
+            ctx.fillStyle = '#3f3f46';
+            ctx.fillText(iata, pos.x + 6, pos.y + 3);
+        });
+
+        if (!targetItinerary) {
+            hudStatus.innerText = "System Standby";
+            hudBody.innerHTML = "Select an option card in the main search results dashboard sidebar to plot its tracking vector arcs.";
             return;
         }
 
-        let carrierFlightCounts = {};
-        let totalFlightSegments = 0;
+        let currentPositionNode = null;
+        let legCounter = 1;
 
-        qualifiedGroup.forEach(wrapper => {
-            wrapper.data.legs.forEach(leg => {
-                leg.forEach(flight => {
-                    if (flight.airlineName) {
-                        carrierFlightCounts[flight.airlineName] = (carrierFlightCounts[flight.airlineName] || 0) + 1;
-                        totalFlightSegments++;
-                    }
-                });
+        hudStatus.innerText = `Tracking Route Vector`;
+        let bodyHtml = `<div style="margin-top:4px; font-weight:bold; color:#fbbf24;">Total Fare: ${formatPrice(targetItinerary.price)}</div>`;
+
+        targetItinerary.legs.forEach((legArray) => {
+            legArray.forEach((flight) => {
+                const startGeo = lookupGeoPixelCoordinates(flight.fromAirportIata);
+                const destGeo = lookupGeoPixelCoordinates(flight.toAirportIata);
+
+                const midX = (startGeo.x + destGeo.x) / 2;
+                const midY = (startGeo.y + destGeo.y) / 2 - 50; 
+
+                const qScore = flight.computedQuality || 50;
+                ctx.strokeStyle = qScore >= 70 ? '#10b981' : (qScore >= 45 ? '#f59e0b' : '#ef4444');
+                ctx.lineWidth = 3;
+
+                // Draw Great-Circle curved vector path
+                ctx.beginPath();
+                ctx.moveTo(startGeo.x, startGeo.y);
+                ctx.quadraticCurveTo(midX, midY, destGeo.x, destGeo.y);
+                ctx.stroke();
+
+                // Draw arrival hub marker vector rings
+                ctx.fillStyle = '#3b82f6';
+                ctx.beginPath();
+                ctx.arc(destGeo.x, destGeo.y, 5, 0, 2 * Math.PI);
+                ctx.fill();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 10px sans-serif';
+                ctx.fillText(flight.toAirportIata, destGeo.x + 8, destGeo.y + 3);
+
+                bodyHtml += `<div style="border-top:1px solid #3f3f46; margin-top:5px; padding-top:4px;">
+                    <b>${flight.flightCode}</b> (${flight.fromAirportIata}➔${flight.toAirportIata})<br/>
+                    Carrier: ${flight.airlineName}<br/>
+                    Equip: ${flight.airplaneModelName || 'Jet'}<br/>
+                    Comfort Index: ${qScore}/100
+                </div>`;
+                
+                currentPositionNode = startGeo;
             });
         });
 
-        let sortedCarriers = Object.entries(carrierFlightCounts).sort((a, b) => b[1] - a[1]);
-        dominanceBox.innerHTML = sortedCarriers.map(([carrierName, count]) => {
-            const percentage = Math.round((count / totalFlightSegments) * 100);
-            let stanceLabel = "Active Network";
-            if (percentage >= 50) stanceLabel = "🏆 Dominant Monopoly";
-            else if (percentage >= 25) stanceLabel = "🔥 Major Stakeholder";
-            return `<div class="gf-list-item"><span style="font-weight: 500;">📊 ${carrierName}</span><span style="color: #60a5fa; font-size:11px;">${percentage}% (${stanceLabel})</span></div>`;
-        }).join('');
-    }
-
-    function updateTravelGuidePanels(destCode, generatedPrices) {
-        const attractionsBox = document.getElementById('gf-attractions-box');
-        const hotelsBox = document.getElementById('gf-hotels-box');
-        const chartBox = document.getElementById('gf-price-chart');
-        const summaryText = document.getElementById('gf-trend-summary-text');
-
-        const guide = dynamicGeoDirectory[destCode] || {
-            attractions: [`${destCode} Downtown Historical Tour`, `${destCode} Regional Landmark Sightseeing`],
-            hotels: [`${destCode} Grand Airport Palace Resort ($135/nt)`, `${destCode} Premium Transit Business Inn ($90/nt)`]
-        };
-
-        attractionsBox.innerHTML = guide.attractions.map(item => `<div class="gf-list-item"><span>📍 ${item}</span></div>`).join('');
-        hotelsBox.innerHTML = guide.hotels.map(item => `<div class="gf-list-item"><span>🏨 ${item}</span></div>`).join('');
-
-        chartBox.innerHTML = '';
-        if (!generatedPrices || generatedPrices.length === 0) {
-            summaryText.innerText = "No price distribution available.";
-            return;
+        if (currentPositionNode) {
+            ctx.fillStyle = '#fbbf24';
+            ctx.beginPath();
+            ctx.arc(currentPositionNode.x, currentPositionNode.y, 6, 0, 2 * Math.PI);
+            ctx.fill();
         }
 
-        const minPrice = Math.min(...generatedPrices);
-        const maxPrice = Math.max(...generatedPrices);
-        summaryText.innerText = `Prices spread from ${formatPrice(minPrice)} to ${formatPrice(maxPrice)}.`;
-
-        const totalBarsCount = 16;
-        const bucketSize = (maxPrice - minPrice) / totalBarsCount || 1;
-        const distributionBuckets = Array(totalBarsCount).fill(0);
-
-        generatedPrices.forEach(p => {
-            let bucketIdx = Math.floor((p - minPrice) / bucketSize);
-            if (bucketIdx >= totalBarsCount) bucketIdx = totalBarsCount - 1;
-            distributionBuckets[bucketIdx]++;
-        });
-
-        const maxBucketCount = Math.max(...distributionBuckets) || 1;
-        const lowestOccupiedBucket = distributionBuckets.findIndex(count => count > 0);
-
-        distributionBuckets.forEach((count, idx) => {
-            const bar = document.createElement('div');
-            bar.className = 'gf-chart-bar';
-            const calculatedPercentage = (count / maxBucketCount) * 100;
-            bar.style.height = `${Math.max(calculatedPercentage, 6)}%`;
-            bar.title = `${count} itineraries around ${formatPrice(minPrice + (idx * bucketSize))}`;
-
-            if (idx === lowestOccupiedBucket) bar.className += ' lowest-deal';
-            chartBox.appendChild(bar);
-        });
+        hudBody.innerHTML = bodyHtml;
     }
 
     function processAndRenderFilters() {
@@ -879,15 +814,28 @@
         }
 
         resultsBox.innerHTML = '';
-        activeTargetGroup.forEach(wrapper => {
+        activeTargetGroup.forEach((wrapper, loopIdx) => {
             const itinerary = wrapper.data;
             const finalCalculatedCost = wrapper.calculatedPrice;
 
             const card = document.createElement('div');
             card.className = 'gf-card';
+            if (selectedItineraryIndex === loopIdx) card.className += ' gf-card-selected';
             
             card.addEventListener('click', (e) => {
                 if (e.target.closest('.gf-details') || e.target.closest('.gf-book-airline-btn')) return;
+                
+                // Toggle active selected style layout properties
+                document.querySelectorAll('.gf-card').forEach(c => c.classList.remove('gf-card-selected'));
+                card.classList.add('gf-card-selected');
+                selectedItineraryIndex = loopIdx;
+
+                // Sync the specific tracking data segments to popout workspace canvas context
+                drawMapWorkspaceContext({
+                    legs: itinerary.legs,
+                    price: finalCalculatedCost
+                });
+
                 const detailsDrawer = card.querySelector('.gf-details');
                 if (detailsDrawer) detailsDrawer.classList.toggle('active');
             });
@@ -1015,7 +963,6 @@
                         cateringMenu = "🥪 Light Snacks & Sandwiches";
                     }
 
-                    // Integrated PSE Quality Matrix Calculations
                     let classComfortModifier = cabinClass === 'first' ? 30 : (cabinClass === 'business' ? 15 : 0);
                     let carrierComfortModifier = targetProfile.category === 'PREMIUM' ? 15 : (targetProfile.category === 'LCC' ? -15 : 0);
                     let comfortScore = Math.max(10, Math.min(100, Math.round((qScore * 0.6) + 30 + classComfortModifier + carrierComfortModifier)));
@@ -1157,6 +1104,9 @@
         const resultsBox = document.getElementById('gf-results-box');
         const builderBox = document.getElementById('gf-legs-builder-box');
         
+        selectedItineraryIndex = null;
+        drawMapWorkspaceContext(null);
+
         const rawNodes = [];
         Array.from(builderBox.children).forEach(row => {
             const fromCode = row.querySelector('.gf-loc-from').value.trim().toUpperCase();
@@ -1241,4 +1191,30 @@
     document.getElementById('gf-bag-checked').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-date-input').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-matrix-sort').addEventListener('change', processAndRenderFilters);
+
+    document.getElementById('gf-add-leg-trigger').addEventListener('click', () => {
+        const builderBox = document.getElementById('gf-legs-builder-box');
+        const currentCount = builderBox.children.length;
+        const previousToVal = builderBox.lastElementChild.querySelector('.gf-loc-to').value.toUpperCase();
+
+        const newRow = document.createElement('div');
+        newRow.className = 'gf-leg-builder-row';
+        newRow.setAttribute('data-leg-index', currentCount);
+        const uniqueBtnId = `gf-swap-trigger-${currentCount}`;
+        newRow.innerHTML = `
+            <div class="gf-input-group">
+                <span class="gf-label">From</span>
+                <input type="text" class="gf-input gf-loc-from" placeholder="e.g. LAX" value="${previousToVal}">
+            </div>
+            <button id="${uniqueBtnId}" class="gf-swap-btn">⇄</button>
+            <div class="gf-input-group">
+                <span class="gf-label">To</span>
+                <input type="text" class="gf-input gf-loc-to" placeholder="e.g. JFK">
+            </div>
+            <button class="gf-remove-leg-btn">✕</button>
+        `;
+        newRow.querySelector('.gf-remove-leg-btn').addEventListener('click', () => { newRow.remove(); });
+        builderBox.appendChild(newRow);
+        bindSwapLogic(uniqueBtnId, '.gf-loc-from', '.gf-loc-to');
+    });
 })();
