@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v14.2)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v14.3)
 // @namespace    https://github.com/raid2256
-// @version      14.2
-// @description  Google Flights style aggregator with exact airport matching, custom tabs, allied interline rules, explicit carrier type directories, flight departure/arrival timelines, on-demand monitor matrices, popout space cloning, and adaptive single-carrier direct booking portal layouts.
+// @version      14.3
+// @description  Google Flights style aggregator with exact airport matching, allied interline engines, explicit carrier registries, flight departure/arrival timelines, on-demand monitor matrices, and an advanced integrated Product Service & Equipment (PSE) Quality Index framework.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -43,12 +43,12 @@
 
     // Fleet configurations database
     const fleetConfigMap = {
-        "Boeing 777": { layout: "3-4-3 Arrangement", pitch: "31-32\" Standard Economy", config: "Wide-body Twin Jet", wifiGen: "Satellite Ka-Band", baseSpeed: "Up to 100 Mbps", screenDef: "11-inch HD Touchscreen" },
-        "Boeing 787": { layout: "3-3-3 Arrangement", pitch: "32\" Dreamliner Standard", config: "High-Efficiency Wide-body", wifiGen: "Satellite Ku-Band", baseSpeed: "Up to 50 Mbps", screenDef: "12-inch Smart Screen" },
-        "Airbus A350": { layout: "3-3-3 Arrangement", pitch: "32-33\" Extra Wide Ergonomics", config: "Advanced Composite Wide-body", wifiGen: "Next-Gen Ka-Band", baseSpeed: "Up to 150 Mbps", screenDef: "13-inch Ultra-HD Screen" },
-        "Airbus A320": { layout: "3-3 Arrangement", pitch: "30\" Short-Haul Standard", config: "Narrow-body Single Aisle", wifiGen: "Air-to-Ground 4G", baseSpeed: "Up to 15 Mbps", screenDef: "Streaming Content to Personal Device" },
-        "Boeing 737": { layout: "3-3 Arrangement", pitch: "30-31\" Single Aisle", config: "Narrow-body Standard", wifiGen: "Satellite Ku-Band", baseSpeed: "Up to 40 Mbps", screenDef: "Overhead Shared Monitors" },
-        "Airbus A380": { layout: "3-4-3 Lower / 2-4-2 Upper", pitch: "32-34\" Double Decker Spacing", config: "Ultra-Large Quad Jet Superjumbo", wifiGen: "Dual-Band Satellite", baseSpeed: "Up to 80 Mbps", screenDef: "11.5-inch Personal IFE System" }
+        "Boeing 777": { layout: "3-4-3 Arrangement", pitch: "31-32\" Standard Economy", config: "Wide-body Twin Jet", wifiGen: "Satellite Ka-Band", baseSpeed: "Up to 100 Mbps", screenDef: "11-inch HD Touchscreen", baseDensity: 82 },
+        "Boeing 787": { layout: "3-3-3 Arrangement", pitch: "32\" Dreamliner Standard", config: "High-Efficiency Wide-body", wifiGen: "Satellite Ku-Band", baseSpeed: "Up to 50 Mbps", screenDef: "12-inch Smart Screen", baseDensity: 74 },
+        "Airbus A350": { layout: "3-3-3 Arrangement", pitch: "32-33\" Extra Wide Ergonomics", config: "Advanced Composite Wide-body", wifiGen: "Next-Gen Ka-Band", baseSpeed: "Up to 150 Mbps", screenDef: "13-inch Ultra-HD Screen", baseDensity: 70 },
+        "Airbus A320": { layout: "3-3 Arrangement", pitch: "30\" Short-Haul Standard", config: "Narrow-body Single Aisle", wifiGen: "Air-to-Ground 4G", baseSpeed: "Up to 15 Mbps", screenDef: "Streaming Content to Personal Device", baseDensity: 90 },
+        "Boeing 737": { layout: "3-3 Arrangement", pitch: "30-31\" Single Aisle", config: "Narrow-body Standard", wifiGen: "Satellite Ku-Band", baseSpeed: "Up to 40 Mbps", screenDef: "Overhead Shared Monitors", baseDensity: 92 },
+        "Airbus A380": { layout: "3-4-3 Lower / 2-4-2 Upper", pitch: "32-34\" Double Decker Spacing", config: "Ultra-Large Quad Jet Superjumbo", wifiGen: "Dual-Band Satellite", baseSpeed: "Up to 80 Mbps", screenDef: "11.5-inch Personal IFE System", baseDensity: 65 }
     };
 
     // Full Alliance Matrix for interlining and dynamic surcharge mapping
@@ -195,7 +195,6 @@
         return h > 0 ? `${h}h ${m}m` : `${m}m`;
     }
 
-    // Mathematical parser to convert timestamp indices into clean AM/PM text rows
     function formatTimeValue(rawMinutes) {
         let cleanMinutes = Math.floor(rawMinutes) % 1440;
         let hours = Math.floor(cleanMinutes / 60);
@@ -954,7 +953,6 @@
                 legFlights.forEach((flight, fIndex) => {
                     let segmentIsSplit = fIndex > 0 && legFlights[fIndex - 1].airlineName !== flight.airlineName;
                     
-                    // Restored explicit Departure and Arrival calculations
                     let departureTimeRaw = flight.departure || (480 + (index * 180) + (fIndex * 90));
                     let arrivalTimeRaw = flight.arrival || (departureTimeRaw + (flight.duration || 120));
                     
@@ -991,7 +989,7 @@
                     const allianceName = getAirlineAlliance(flight.airlineName) || "Independent Carrier";
 
                     let modelMatchKey = Object.keys(fleetConfigMap).find(key => flight.airplaneModelName && flight.airplaneModelName.includes(key)) || "Generic Commercial";
-                    let specsProfile = fleetConfigMap[modelMatchKey] || { layout: "Standard Seat Pitch", pitch: "Comfort configurations unmapped", config: "Commercial Core Liner", wifiGen: "Legacy Network", baseSpeed: "Limited Coverage", screenDef: "No Screen" };
+                    let specsProfile = fleetConfigMap[modelMatchKey] || { layout: "Standard Seat Pitch", pitch: "Comfort configurations unmapped", config: "Commercial Core Liner", wifiGen: "Legacy Network", baseSpeed: "Limited Coverage", screenDef: "No Screen", baseDensity: 80 };
 
                     let dynamicWifiSpeed = specsProfile.baseSpeed;
                     let wifiStatus = "Wi-Fi Unavailable";
@@ -1000,7 +998,6 @@
                         if (qScore >= 80) wifiStatus += " • ⚡ High Priority Band";
                     }
 
-                    // On-Demand Entertainment Monitor Telemetry System Detector Logic
                     let monitorStatus = specsProfile.screenDef;
                     const targetProfile = carrierRegistry[flight.airlineName] || { category: "LEGACY" };
                     if (targetProfile.category === "PREMIUM" || cabinClass === "first" || cabinClass === "business") {
@@ -1018,6 +1015,15 @@
                         cateringMenu = "🥪 Light Snacks & Sandwiches";
                     }
 
+                    // Integrated PSE Quality Matrix Calculations
+                    let classComfortModifier = cabinClass === 'first' ? 30 : (cabinClass === 'business' ? 15 : 0);
+                    let carrierComfortModifier = targetProfile.category === 'PREMIUM' ? 15 : (targetProfile.category === 'LCC' ? -15 : 0);
+                    let comfortScore = Math.max(10, Math.min(100, Math.round((qScore * 0.6) + 30 + classComfortModifier + carrierComfortModifier)));
+
+                    let densityClassModifier = cabinClass === 'first' ? -35 : (cabinClass === 'business' ? -15 : 5);
+                    let rawYieldDensity = specsProfile.baseDensity + densityClassModifier + (targetProfile.category === 'LCC' ? 8 : 0);
+                    let spaceYieldIndex = Math.max(20, Math.min(120, Math.round(rawYieldDensity)));
+
                     const amenitiesList = [
                         { label: "Alliance Profile", val: allianceName },
                         { label: "Cabin Class", val: classLabelText },
@@ -1026,7 +1032,9 @@
                         { label: "On-Demand Monitor Matrix", val: monitorStatus },
                         { label: "Dynamic Telemetry Wi-Fi", val: wifiStatus },
                         { label: "In-Flight Catering Matrix", val: cateringMenu },
-                        { label: "Power & Outlets", val: (rawFeatures.includes('POWER_OUTLET') || cabinClass !== 'economy') ? "In-seat AC power outlets" : "No outlets available" }
+                        { label: "Power & Outlets", val: (rawFeatures.includes('POWER_OUTLET') || cabinClass !== 'economy') ? "In-seat AC power outlets" : "No outlets available" },
+                        { label: "Passenger Comfort Rating", val: `⭐ ${comfortScore}/100 Index (Hard Product Ergonomics)` },
+                        { label: "Floor-Space Yield Index", val: `📈 ${spaceYieldIndex} Efficiency Factor (Asset Density)` }
                     ];
 
                     emissionsTotal += Math.round(durationMins * 4.2 * passengerCount);
@@ -1100,7 +1108,6 @@
                     const header = contextDoc.getElementById('gf-draggable-header');
                     const titleSpan = header.querySelector('.gf-title');
                     
-                    // Pull specific primary category color mapping configuration from directory profile
                     const carrierData = carrierRegistry[targetAirline] || { category: "LEGACY", primaryColor: "#1e40af" };
                     
                     header.style.backgroundColor = carrierData.primaryColor;
