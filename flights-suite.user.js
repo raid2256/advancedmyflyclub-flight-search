@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v15.1)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v15.2)
 // @namespace    https://github.com/raid2256
-// @version      15.1
+// @version      15.2
 // @description  Ultimate flight aggregator suite with allied interline surcharges, multi-ticket connection safety ratings, currency switcher matrices, and full PSE Quality Indexes.
 // @match        *://*.myfly.club/*
 // @grant        none
@@ -20,18 +20,6 @@
     let activeResultTab = 'best'; 
     let currentPortalMode = "G-FLIGHTS"; 
     let activeCurrency = "USD";
-
-    // Explicit Carrier Branding Registry Configuration
-    const carrierRegistry = {
-        "Dirt Cheap Airlines": { category: "LCC", primaryColor: "#b91c1c" },
-        "Avelo": { category: "LCC", primaryColor: "#0ea5e9" },
-        "RyanAir Group": { category: "LCC", primaryColor: "#2563eb" },
-        "SkyHigh": { category: "LEGACY", primaryColor: "#1e40af" },
-        "Delta": { category: "LEGACY", primaryColor: "#e11d48" },
-        "Majestic Air": { category: "LEGACY", primaryColor: "#4338ca" },
-        "Oiligarch Transport Services": { category: "PREMIUM", primaryColor: "#111827" },
-        "EuroElites": { category: "PREMIUM", primaryColor: "#1e293b" }
-    };
 
     // Currency Switcher Matrix Configurations
     const currencyRates = {
@@ -188,6 +176,7 @@
         return `${profile.symbol}${calculatedValue.toLocaleString()}`;
     }
 
+    // Rest of helper functions remain unchanged
     function formatDuration(minutes) {
         const h = Math.floor(minutes / 60);
         const m = minutes % 60;
@@ -907,11 +896,8 @@
                     }
 
                     let monitorStatus = specsProfile.screenDef;
-                    const targetProfile = carrierRegistry[flight.airlineName] || { category: "LEGACY" };
-                    if (targetProfile.category === "PREMIUM" || cabinClass === "first" || cabinClass === "business") {
+                    if (cabinClass === "first" || cabinClass === "business") {
                         monitorStatus = "15.6-inch Ultra-HD Touchscreen On-Demand Monitor (Complimentary Live TV + Streaming)";
-                    } else if (targetProfile.category === "LCC") {
-                        monitorStatus = "Bring Your Own Device (No seatback monitor installed. USB streaming enabled)";
                     }
 
                     let cateringMenu = "Beverage Service Only";
@@ -923,13 +909,12 @@
                         cateringMenu = "🥪 Light Snacks & Sandwiches";
                     }
 
-                    // Integrated PSE Quality Matrix Calculations
+                    // Standard comfort tracking math defaults
                     let classComfortModifier = cabinClass === 'first' ? 30 : (cabinClass === 'business' ? 15 : 0);
-                    let carrierComfortModifier = targetProfile.category === 'PREMIUM' ? 15 : (targetProfile.category === 'LCC' ? -15 : 0);
-                    let comfortScore = Math.max(10, Math.min(100, Math.round((qScore * 0.6) + 30 + classComfortModifier + carrierComfortModifier)));
+                    let comfortScore = Math.max(10, Math.min(100, Math.round((qScore * 0.6) + 30 + classComfortModifier)));
 
                     let densityClassModifier = cabinClass === 'first' ? -35 : (cabinClass === 'business' ? -15 : 5);
-                    let rawYieldDensity = specsProfile.baseDensity + densityClassModifier + (targetProfile.category === 'LCC' ? 8 : 0);
+                    let rawYieldDensity = specsProfile.baseDensity + densityClassModifier;
                     let spaceYieldIndex = Math.max(20, Math.min(120, Math.round(rawYieldDensity)));
 
                     const amenitiesList = [
@@ -1015,10 +1000,9 @@
                     const header = currentDoc.getElementById('gf-draggable-header');
                     const titleSpan = header.querySelector('.gf-title');
                     
-                    const carrierData = carrierRegistry[targetAirline] || { category: "LEGACY", primaryColor: "#1e40af" };
-                    
-                    header.style.backgroundColor = carrierData.primaryColor;
-                    titleSpan.innerHTML = `<span class="gf-airline-logo-badge" style="background:#fff; color:#111827; margin-right:6px; padding:2px 6px;">${firstLetterCode}</span> ${targetAirline} Direct Booking Hub [Category: ${carrierData.category}]`;
+                    // Applies a fallback blue signature color theme dynamically for any booking hub selection
+                    header.style.backgroundColor = '#1d4ed8';
+                    titleSpan.innerHTML = `<span class="gf-airline-logo-badge" style="background:#fff; color:#111827; margin-right:6px; padding:2px 6px;">${firstLetterCode}</span> ${targetAirline} Direct Booking Hub`;
                     currentDoc.getElementById('gf-portal-back-trigger').style.display = 'inline-flex';
                     
                     processAndRenderFilters();
