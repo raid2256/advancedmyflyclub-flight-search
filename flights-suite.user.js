@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v15.2)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v15.3)
 // @namespace    https://github.com/raid2256
-// @version      15.2
-// @description  Ultimate flight aggregator suite with allied interline surcharges, multi-ticket connection safety ratings, currency switcher matrices, and full PSE Quality Indexes.
+// @version      15.3
+// @description  Ultimate flight aggregator suite with allied interline surcharges, multi-ticket connection safety ratings, currency switcher matrices, and itemized PSE Quality Indexes.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -36,7 +36,8 @@
         "Airbus A350": { layout: "3-3-3 Arrangement", pitch: "32-33\" Extra Wide Ergonomics", config: "Advanced Composite Wide-body", wifiGen: "Next-Gen Ka-Band", baseSpeed: "Up to 150 Mbps", screenDef: "13-inch Ultra-HD Screen", baseDensity: 70 },
         "Airbus A320": { layout: "3-3 Arrangement", pitch: "30\" Short-Haul Standard", config: "Narrow-body Single Aisle", wifiGen: "Air-to-Ground 4G", baseSpeed: "Up to 15 Mbps", screenDef: "Streaming Content to Personal Device", baseDensity: 90 },
         "Boeing 737": { layout: "3-3 Arrangement", pitch: "30-31\" Single Aisle", config: "Narrow-body Standard", wifiGen: "Satellite Ku-Band", baseSpeed: "Up to 40 Mbps", screenDef: "Overhead Shared Monitors", baseDensity: 92 },
-        "Airbus A380": { layout: "3-4-3 Lower / 2-4-2 Upper", pitch: "32-34\" Double Decker Spacing", config: "Ultra-Large Quad Jet Superjumbo", wifiGen: "Dual-Band Satellite", baseSpeed: "Up to 80 Mbps", screenDef: "11.5-inch Personal IFE System", baseDensity: 65 }
+        "Airbus A380": { layout: "3-4-3 Lower / 2-4-2 Upper", pitch: "32-34\" Double Decker Spacing", config: "Ultra-Large Quad Jet Superjumbo", wifiGen: "Dual-Band Satellite", baseSpeed: "Up to 80 Mbps", screenDef: "11.5-inch Personal IFE System", baseDensity: 65 },
+        "Airbus A220": { layout: "2-3 Arrangement", pitch: "32\" High Comfort Profile", config: "Modern Fuel-Efficient Regional Jet", wifiGen: "Streaming Satellite", baseSpeed: "Up to 70 Mbps", screenDef: "10-inch Touchscreen", baseDensity: 68 }
     };
 
     const allianceMap = {
@@ -123,6 +124,10 @@
         .gf-leg-sub { font-size: 11px; color: #71717a; display: flex; justify-content: space-between; align-items: center; }
         .gf-timeline { font-size: 12px; font-weight: bold; color: #fbbf24; margin-bottom: 2px; }
         
+        .gf-component-scores { display: flex; gap: 8px; font-size: 10px; background: rgba(255,255,255,0.02); padding: 4px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05); margin-top: 2px; color: #a1a1aa; }
+        .gf-score-pill { display: inline-flex; align-items: center; gap: 3px; }
+        .gf-score-num { font-weight: bold; color: #3b82f6; }
+
         .gf-details { display: none; background: #141416; padding: 12px; border-radius: 8px; font-size: 12px; color: #d4d4d8; border: 1px solid #27272a; flex-direction: column; gap: 8px; margin-top: 4px; cursor: default; }
         .gf-details.active { display: flex; }
         .gf-detail-section { display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid #27272a; padding-bottom: 8px; margin-bottom: 4px; }
@@ -176,7 +181,6 @@
         return `${profile.symbol}${calculatedValue.toLocaleString()}`;
     }
 
-    // Rest of helper functions remain unchanged
     function formatDuration(minutes) {
         const h = Math.floor(minutes / 60);
         const m = minutes % 60;
@@ -909,6 +913,12 @@
                         cateringMenu = "🥪 Light Snacks & Sandwiches";
                     }
 
+                    // Granular Component Scores Matrix Calculation
+                    let classBonus = cabinClass === 'first' ? 1.5 : (cabinClass === 'business' ? 1.0 : 0);
+                    let baseLegroom = Math.min(5, Math.max(1, ((qScore / 20) + classBonus + (specsProfile.baseDensity < 75 ? 0.5 : -0.3)))).toFixed(1);
+                    let baseIfe = Math.min(5, Math.max(1, (rawFeatures.includes('WIFI') ? 4.5 : (qScore / 20) + 0.5))).toFixed(1);
+                    let baseService = Math.min(5, Math.max(1, ((qScore / 20) + (durationMins > 180 ? 0.6 : 0)))).toFixed(1);
+
                     // Standard comfort tracking math defaults
                     let classComfortModifier = cabinClass === 'first' ? 30 : (cabinClass === 'business' ? 15 : 0);
                     let comfortScore = Math.max(10, Math.min(100, Math.round((qScore * 0.6) + 30 + classComfortModifier)));
@@ -960,6 +970,12 @@
                                 <span><span class="gf-airline-logo-badge">${flight.airlineName.charAt(0)}</span> ${flight.airlineName} • <i style="color: #a1a1aa;">${flight.airplaneModelName || 'Commercial Jet'}</i></span>
                                 <span class="${qTier.class}" style="font-weight: 600;">${qTier.text}</span>
                             </div>
+                            
+                            <div class="gf-component-scores">
+                                <span class="gf-score-pill">💺 Legroom: <span class="gf-score-num">${baseLegroom}/5</span></span>
+                                <span class="gf-score-pill">📺 IFE: <span class="gf-score-num">${baseIfe}/5</span></span>
+                                <span class="gf-score-pill">🍽️ Service: <span class="gf-score-num">${baseService}/5</span></span>
+                            </div>
                         </div>
                     `;
                 });
@@ -1000,7 +1016,6 @@
                     const header = currentDoc.getElementById('gf-draggable-header');
                     const titleSpan = header.querySelector('.gf-title');
                     
-                    // Applies a fallback blue signature color theme dynamically for any booking hub selection
                     header.style.backgroundColor = '#1d4ed8';
                     titleSpan.innerHTML = `<span class="gf-airline-logo-badge" style="background:#fff; color:#111827; margin-right:6px; padding:2px 6px;">${firstLetterCode}</span> ${targetAirline} Direct Booking Hub`;
                     currentDoc.getElementById('gf-portal-back-trigger').style.display = 'inline-flex';
