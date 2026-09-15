@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v15.3)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v15.4)
 // @namespace    https://github.com/raid2256
-// @version      15.3
-// @description  Google Flights style aggregator with enhanced fleet matching for long-haul narrowbodies (A321LR/XLR, 737 MAX), native game API integration, inter-alliance codeshare detection, and baggage engines.
+// @version      15.4
+// @description  Google Flights style aggregator with explicit cabin price payload verification, long-haul narrowbody fleet matching, inter-alliance codeshare detection, and baggage engines.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -221,41 +221,34 @@
         return fleetConfigMap["Generic Commercial"];
     }
 
+    // UPDATED: Strict Cabin Verification using explicit payload price properties (Option 2)
     function getCabinPrice(flight, cabinClass) {
-        if (!flight) return 0;
-        const basePrice = flight.price || 0;
-        if (cabinClass === 'economy') return basePrice;
-        
-        const classFields = {
-            'premium_economy': ['pricePremiumEconomy', 'pricePE', 'premiumEconomyPrice', 'premiumEconomy'],
-            'business': ['priceBusiness', 'priceBiz', 'businessPrice', 'business'],
-            'first': ['priceFirst', 'priceF', 'firstPrice', 'first']
-        };
-        
-        const fields = classFields[cabinClass] || [];
-        for (const field of fields) {
-            if (flight[field] && flight[field] > 0) return flight[field];
+        if (!flight) return null;
+        if (cabinClass === 'economy') return flight.price || null;
+
+        // Verify explicit class properties returned by payload
+        if (cabinClass === 'business') {
+            if (flight.priceBusiness && flight.priceBusiness > 0) return flight.priceBusiness;
+            if (flight.priceBiz && flight.priceBiz > 0) return flight.priceBiz;
+            if (flight.prices && flight.prices.business > 0) return flight.prices.business;
+            return null; // Omitted on LCCs/Economy-only configurations
         }
-        
-        if (flight.prices && typeof flight.prices === 'object') {
-            const classMap = {
-                'premium_economy': ['premiumEconomy', 'Premium Economy', 'W'],
-                'business': ['business', 'Business', 'J'],
-                'first': ['first', 'First', 'F']
-            };
-            const keys = classMap[cabinClass] || [];
-            for (const key of keys) {
-                if (flight.prices[key] && flight.prices[key] > 0) return flight.prices[key];
-            }
+
+        if (cabinClass === 'first') {
+            if (flight.priceFirst && flight.priceFirst > 0) return flight.priceFirst;
+            if (flight.priceF && flight.priceF > 0) return flight.priceF;
+            if (flight.prices && flight.prices.first > 0) return flight.prices.first;
+            return null; // Omitted if First Class is not configured
         }
-        
-        const multipliers = { 'economy': 1.0, 'premium_economy': 1.7, 'business': 3.0, 'first': 5.0 };
-        let multiplier = multipliers[cabinClass] || 1.0;
-        const duration = flight.duration || 120;
-        if (duration > 360 && (cabinClass === 'business' || cabinClass === 'first')) multiplier *= 1.2;
-        if (duration < 180 && (cabinClass === 'business' || cabinClass === 'first')) multiplier *= 0.75;
-        
-        return Math.round(basePrice * multiplier);
+
+        if (cabinClass === 'premium_economy') {
+            if (flight.pricePremiumEconomy && flight.pricePremiumEconomy > 0) return flight.pricePremiumEconomy;
+            if (flight.pricePE && flight.pricePE > 0) return flight.pricePE;
+            if (flight.prices && flight.prices.premiumEconomy > 0) return flight.prices.premiumEconomy;
+            return null; // Omitted if Premium Economy is not configured
+        }
+
+        return null;
     }
 
     function lookupAirportId(iata) {
@@ -668,13 +661,20 @@
             let interlineFeesTotal = 0;
             let criticalLayoverWindowFloor = Infinity;
             let totalCabinCost = 0;
+            let isClassAvailable = true;
 
             itinerary.legs.forEach(leg => {
                 leg.forEach(flight => {
                     const cabinPrice = getCabinPrice(flight, cabinClass);
-                    totalCabinCost += cabinPrice;
+                    if (cabinPrice === null) {
+                        isClassAvailable = false; // Class omitted in server payload for this flight
+                    } else {
+                        totalCabinCost += cabinPrice;
+                    }
                 });
             });
+
+            if (!isClassAvailable) return; // Skip flight if requested cabin class is not configured
 
             itinerary.legs.forEach(leg => {
                 for (let i = 0; i < leg.length; i++) {
@@ -752,7 +752,7 @@
         });
 
         if (evaluatedItineraries.length === 0) {
-            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">No itineraries match your filters.</div>`;
+            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">No itineraries match your cabin class or filters.</div>`;
             return;
         }
 
@@ -856,7 +856,7 @@
                     if (cabinClass === 'business' || cabinClass === 'first') cateringMenu = "🍱 Multi-course Premium Dining";
                     else if (durationMins > 240) cateringMenu = "🍲 Hot Meal Service";
 
-                    const flightCabinPrice = getCabinPrice(flight, cabinClass);
+                    const flightCabinPrice = getCabinPrice(flight, cabinClass) || flight.price;
                     const pricePerPax = flightCabinPrice + (baggageSurchargeTotal / itinerary.legs.reduce((s, l) => s + l.length, 0));
 
                     const amenitiesList = [
@@ -882,7 +882,6 @@
                         </div>
                     `;
 
-                    // Inter-alliance and operating carrier codeshare logic
                     const currentFlightAirline = flight.airlineName;
                     const allianceMain = getAirlineAlliance(dominantAirline);
                     const allianceCurrent = getAirlineAlliance(currentFlightAirline);
@@ -1042,5 +1041,5 @@
     document.getElementById('gf-date-input').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-matrix-sort').addEventListener('change', processAndRenderFilters);
 
-    console.log('✈️ MyFlyClub Advanced Flight Search v15.3 loaded successfully!');
+    console.log('✈️ MyFlyClub Advanced Flight Search v15.4 loaded successfully!');
 })();
