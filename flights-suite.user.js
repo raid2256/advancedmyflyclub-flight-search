@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v15.6)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v15.7)
 // @namespace    https://github.com/raid2256
-// @version      15.6
-// @description  Google Flights style aggregator with direct carrier rendering, alliance interline logic, dynamic seat class detection, and baggage engines.
+// @version      15.7
+// @description  Google Flights style aggregator with single unified list output, direct carrier rendering, alliance interline logic, dynamic seat class detection, and baggage engines.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -15,8 +15,6 @@
 
     const todayStr = new Date().toISOString().split('T')[0];
     let compiledItineraries = [];
-    let activeResultTab = 'best'; 
-    
     let currentPortalMode = "G-FLIGHTS"; 
 
     const currencyRates = {
@@ -89,7 +87,6 @@
         .gf-leg-builder-row { display: flex; gap: 8px; align-items: center; background: #202024; padding: 4px 6px; border-radius: 8px; border: 1px solid #27272a; }
         .gf-add-leg-btn { background: none; border: 1px dashed #3f3f46; color: #60a5fa; padding: 5px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; text-align: center; width: 100%; margin-top: -4px; }
         .gf-add-leg-btn:hover { background: rgba(59, 130, 246, 0.1); border-color: #3b82f6; }
-        .gf-remove-leg-btn { background: none; border: none; color: #f87171; cursor: pointer; font-size: 13px; padding: 0 4px; font-weight: bold; }
 
         .gf-btn { background: #2563eb; color: #ffffff; border: none; padding: 0 16px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; transition: background 0.2s; height: 36px; display: inline-flex; align-items: center; justify-content: center; }
         .gf-btn:hover { background: #1d4ed8; }
@@ -108,10 +105,6 @@
         .gf-list-item { font-size: 12px; padding: 6px 4px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; }
         
         .gf-right-container { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-        .gf-matrix-tabs { display: flex; width: 100%; border-bottom: 1px solid #27272a; background: #18181b; flex-shrink: 0; }
-        .gf-tab-item { flex: 1; text-align: center; padding: 14px 6px; font-size: 13px; font-weight: 600; color: #a1a1aa; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; user-select: none; }
-        .gf-tab-item:hover { color: #f4f4f5; background: #1e1e24; }
-        .gf-tab-item.active { color: #60a5fa; border-bottom-color: #3b82f6; background: #141416; }
 
         .gf-results { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
         .gf-card { background: #1e1e24; border: 1px solid #27272a; border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; transition: background 0.2s; }
@@ -411,11 +404,6 @@
             </div>
             
             <div class="gf-right-container">
-                <div class="gf-matrix-tabs">
-                    <div id="gf-tab-best" class="gf-tab-item active">Best flights</div>
-                    <div id="gf-tab-cheapest" class="gf-tab-item">Cheapest flights</div>
-                    <div id="gf-tab-other" class="gf-tab-item">Other flights</div>
-                </div>
                 <div id="gf-results-box" class="gf-results">
                     <div style="color: #71717a; text-align: center; margin-top: 150px; font-size: 14px;">
                         Configure travel parameters above and hit Search.
@@ -464,16 +452,6 @@
         
         processAndRenderFilters();
     });
-
-    function setTabActive(tabName) {
-        activeResultTab = tabName;
-        document.querySelectorAll('.gf-tab-item').forEach(el => el.classList.remove('active'));
-        document.getElementById(`gf-tab-${tabName}`).classList.add('active');
-        processAndRenderFilters();
-    }
-    document.getElementById('gf-tab-best').addEventListener('click', () => setTabActive('best'));
-    document.getElementById('gf-tab-cheapest').addEventListener('click', () => setTabActive('cheapest'));
-    document.getElementById('gf-tab-other').addEventListener('click', () => setTabActive('other'));
 
     document.getElementById('gf-currency-select').addEventListener('change', (e) => {
         activeCurrency = e.target.value;
@@ -683,30 +661,8 @@
             });
         }
 
-        let tabBest = [], tabCheapest = [], tabOther = [];
-        const costCapCheapest = lowestPriceOverall * 1.15; 
-
-        evaluatedItineraries.forEach(item => {
-            const totalStops = item.data.legs.reduce((acc, l) => acc + (l.length - 1), 0);
-            const scoreAvg = item.data.legs[0]?.[0]?.computedQuality || 50;
-
-            if (item.calculatedPrice <= costCapCheapest && tabCheapest.length < 5) tabCheapest.push(item);
-            if (totalStops <= 1 && scoreAvg >= 60 && item.calculatedPrice <= lowestPriceOverall * 1.4 && !item.isSplitTicket && tabBest.length < 3) {
-                tabBest.push(item);
-            } else {
-                tabOther.push(item);
-            }
-        });
-
-        if (tabBest.length === 0) tabBest = evaluatedItineraries.slice(0, 3);
-        if (tabCheapest.length === 0) tabCheapest = evaluatedItineraries.slice(0, 4);
-
-        let activeTargetGroup = tabBest;
-        if (activeResultTab === 'cheapest') activeTargetGroup = tabCheapest;
-        if (activeResultTab === 'other') activeTargetGroup = tabOther;
-
         resultsBox.innerHTML = '';
-        activeTargetGroup.forEach(wrapper => {
+        evaluatedItineraries.forEach(wrapper => {
             const itinerary = wrapper.data;
             const finalCalculatedCost = wrapper.calculatedPrice;
 
@@ -946,5 +902,5 @@
     document.getElementById('gf-date-input').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-matrix-sort').addEventListener('change', processAndRenderFilters);
 
-    console.log('✈️ MyFlyClub Advanced Flight Search v15.6 loaded successfully!');
+    console.log('✈️ MyFlyClub Advanced Flight Search v15.7 loaded successfully!');
 })();
