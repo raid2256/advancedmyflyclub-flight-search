@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v15.7)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v15.8)
 // @namespace    https://github.com/raid2256
-// @version      15.7
-// @description  Google Flights style aggregator with single unified list output, direct carrier rendering, alliance interline logic, dynamic seat class detection, and baggage engines.
+// @version      15.8
+// @description  Google Flights style aggregator with flight departure/arrival timings, total leg duration, direct carrier rendering, alliance interline logic, and dynamic seat class detection.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -117,6 +117,7 @@
         .gf-leg { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: #141416; border-radius: 6px; border-left: 3px solid #3b82f6; }
         .gf-leg.split-ticket-segment { border-left-color: #a855f7; }
         .gf-leg-title { font-size: 13px; font-weight: 600; color: #f4f4f5; display: flex; justify-content: space-between; }
+        .gf-leg-timing { font-size: 11px; color: #60a5fa; font-weight: 600; display: flex; gap: 8px; align-items: center; }
         .gf-leg-sub { font-size: 11px; color: #71717a; display: flex; justify-content: space-between; align-items: center; }
         
         .gf-details { display: none; background: #141416; padding: 12px; border-radius: 8px; font-size: 12px; color: #d4d4d8; border: 1px solid #27272a; flex-direction: column; gap: 8px; margin-top: 4px; cursor: default; }
@@ -134,6 +135,8 @@
         .gf-class-economy { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
         .gf-class-business { background: #312e81; color: #a5b4fc; border: 1px solid #4338ca; }
         .gf-class-first { background: #701a75; color: #f0abfc; border: 1px solid #86198f; }
+
+        .gf-duration-badge { font-size: 10px; color: #93c5fd; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); padding: 1px 5px; border-radius: 4px; }
 
         .gf-layover { font-size: 11px; color: #fb923c; background: rgba(251, 146, 60, 0.1); border: 1px dashed rgba(251, 146, 60, 0.3); text-align: center; padding: 6px; border-radius: 6px; margin: 2px 0; font-weight: 600; }
         .p-low { color: #4ade80; } .p-mid { color: #facc15; } .p-high { color: #f87171; }
@@ -162,9 +165,29 @@
     }
 
     function formatDuration(minutes) {
+        if (!minutes || isNaN(minutes)) return "N/A";
         const h = Math.floor(minutes / 60);
         const m = minutes % 60;
         return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    }
+
+    function formatTime(val) {
+        if (!val && val !== 0) return "--:--";
+        if (typeof val === 'number' && val > 0 && val < 1440) {
+            const h = Math.floor(val / 60);
+            const m = val % 60;
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            const displayH = h % 12 === 0 ? 12 : h % 12;
+            const displayM = m < 10 ? `0${m}` : m;
+            return `${displayH}:${displayM} ${ampm}`;
+        }
+        try {
+            const dateObj = new Date(val);
+            if (!isNaN(dateObj.getTime())) {
+                return dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+        } catch(e) {}
+        return "--:--";
     }
 
     function getQualityTier(score) {
@@ -721,6 +744,10 @@
                     const cabinInfo = detectFlightCabinInfo(flight);
                     let specsProfile = getFleetConfig(flight.airplaneModelName);
 
+                    const depTimeFormatted = formatTime(flight.departure);
+                    const arrTimeFormatted = formatTime(flight.arrival);
+                    const durFormatted = formatDuration(durationMins);
+
                     const hasPowerOutlet = rawFeatures.includes('POWER_OUTLET') || specsProfile.power || cabinInfo.name !== "Economy";
                     let wifiStatus = "No Wi-Fi Available";
                     if (rawFeatures.includes('WIFI') || qScore >= 65 || specsProfile.wifiGen.includes('Ka-Band')) {
@@ -736,6 +763,7 @@
 
                     const amenitiesList = [
                         { label: "Cabin Seat Class", val: cabinInfo.name },
+                        { label: "Flight Timings", val: `${depTimeFormatted} ➔ ${arrTimeFormatted} (${durFormatted})` },
                         { label: "Alliance Profile", val: flightAlliance || "Independent Carrier" },
                         { label: "Fleet Design Spec", val: `${flight.airplaneModelName || 'Commercial Jet'} (${specsProfile.config})` },
                         { label: "Configuration Pitch", val: `${specsProfile.layout} • ${specsProfile.pitch}` },
@@ -763,6 +791,10 @@
                             <div class="gf-leg-title">
                                 <span>✈️ ${flight.flightCode || 'FLIGHT'} (${flight.fromAirportIata} ➔ ${flight.toAirportIata}) <span class="gf-class-tag ${cabinInfo.css}">${cabinInfo.name}</span></span>
                                 <span>${formatPrice(pricePerPax * passengerCount)}</span>
+                            </div>
+                            <div class="gf-leg-timing">
+                                <span>🕒 ${depTimeFormatted} – ${arrTimeFormatted}</span>
+                                <span class="gf-duration-badge">⏱️ ${durFormatted}</span>
                             </div>
                             <div class="gf-leg-sub">
                                 <span>
@@ -902,5 +934,5 @@
     document.getElementById('gf-date-input').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-matrix-sort').addEventListener('change', processAndRenderFilters);
 
-    console.log('✈️ MyFlyClub Advanced Flight Search v15.7 loaded successfully!');
+    console.log('✈️ MyFlyClub Advanced Flight Search v15.8 loaded successfully!');
 })();
