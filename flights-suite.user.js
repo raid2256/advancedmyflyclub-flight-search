@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v15.4)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v15.6)
 // @namespace    https://github.com/raid2256
-// @version      15.4
-// @description  Google Flights style aggregator with explicit cabin price payload verification, long-haul narrowbody fleet matching, inter-alliance codeshare detection, and baggage engines.
+// @version      15.6
+// @description  Google Flights style aggregator with direct carrier rendering, alliance interline logic, dynamic seat class detection, and baggage engines.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -18,13 +18,6 @@
     let activeResultTab = 'best'; 
     
     let currentPortalMode = "G-FLIGHTS"; 
-    const carrierBrandMatrix = {
-        "SkyHigh": { primary: "#1e40af", secondary: "#1e1e24" },
-        "Magic Flight": { primary: "#6b21a8", secondary: "#1e1e24" },
-        "Dirt Cheap Airlines": { primary: "#b91c1c", secondary: "#1e1e24" },
-        "ALPHA": { primary: "#047857", secondary: "#1e1e24" },
-        "Delta": { primary: "#e11d48", secondary: "#1e1e24" }
-    };
 
     const currencyRates = {
         "USD": { symbol: "$", rate: 1.0 },
@@ -34,7 +27,7 @@
     };
     let activeCurrency = "USD";
 
-    // Enhanced Fleet Configuration Map
+    // Fleet Configuration Map
     const fleetConfigMap = {
         "Airbus A321LR": { layout: "3-3 / 1-1 Biz", pitch: "31-33\" Long-Haul Ergonomics", config: "Long-Range Narrow-body", wifiGen: "High-Speed Ka-Band", baseSpeed: "Up to 100 Mbps", power: true },
         "Airbus A321XLR": { layout: "3-3 / 1-1 Biz", pitch: "32-34\" Ultra Long-Range", config: "Extended-Range Narrow-body", wifiGen: "High-Speed Ka-Band", baseSpeed: "Up to 120 Mbps", power: true },
@@ -141,10 +134,14 @@
         .gf-detail-label { color: #a1a1aa; }
         .gf-detail-val { font-weight: 500; color: #f4f4f5; }
         
-        .gf-badge { background: #065f46; color: #34d399; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; text-transform: uppercase; }
         .gf-badge-guarantee { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
         .gf-badge-selftransfer { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
         
+        .gf-class-tag { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; margin-left: 6px; }
+        .gf-class-economy { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+        .gf-class-business { background: #312e81; color: #a5b4fc; border: 1px solid #4338ca; }
+        .gf-class-first { background: #701a75; color: #f0abfc; border: 1px solid #86198f; }
+
         .gf-layover { font-size: 11px; color: #fb923c; background: rgba(251, 146, 60, 0.1); border: 1px dashed rgba(251, 146, 60, 0.3); text-align: center; padding: 6px; border-radius: 6px; margin: 2px 0; font-weight: 600; }
         .p-low { color: #4ade80; } .p-mid { color: #facc15; } .p-high { color: #f87171; }
         .q-excellent { color: #4ade80; } .q-good { color: #a3e635; } .q-average { color: #facc15; } .q-poor { color: #fb923c; } .q-terrible { color: #f87171; }
@@ -153,7 +150,6 @@
         .gf-popout-btn:hover, .gf-portal-back-btn:hover { background: #3f3f46; color: #ffffff; }
         
         .gf-airline-logo-badge { background: #ffffff; color: #111827; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 800; text-transform: uppercase; margin-right: 4px; display: inline-block; border: 1px solid #e5e7eb; }
-        .gf-codeshare-tag { color: #fbbf24; font-size: 11px; font-style: italic; margin-left: 4px; }
 
         @media (max-width: 768px) {
             #g-flights-suite { width: 100vw; height: 90vh; top: 5vh; right: 0; left: 0; margin: auto; border-radius: 8px; }
@@ -221,33 +217,23 @@
         return fleetConfigMap["Generic Commercial"];
     }
 
-    // Strict Cabin Verification using explicit payload price properties
-    function getCabinPrice(flight, cabinClass) {
-        if (!flight) return null;
-        if (cabinClass === 'economy') return flight.price || null;
+    // Inspect dynamic segment payload to determine seat class automatically
+    function detectFlightCabinInfo(flight) {
+        if (!flight) return { name: "Economy", css: "gf-class-economy" };
 
-        if (cabinClass === 'business') {
-            if (flight.priceBusiness && flight.priceBusiness > 0) return flight.priceBusiness;
-            if (flight.priceBiz && flight.priceBiz > 0) return flight.priceBiz;
-            if (flight.prices && flight.prices.business > 0) return flight.prices.business;
-            return null;
+        let rawClassStr = String(flight.linkClass || flight.cabinClass || flight.cabin || '').toLowerCase();
+        
+        if (rawClassStr.includes('first') || flight.priceFirst > 0 || flight.priceF > 0) {
+            return { name: "First Class", css: "gf-class-first" };
+        }
+        if (rawClassStr.includes('business') || rawClassStr.includes('biz') || flight.priceBusiness > 0 || flight.priceBiz > 0) {
+            return { name: "Business Class", css: "gf-class-business" };
+        }
+        if (rawClassStr.includes('premium') || flight.pricePremiumEconomy > 0) {
+            return { name: "Premium Economy", css: "gf-class-business" };
         }
 
-        if (cabinClass === 'first') {
-            if (flight.priceFirst && flight.priceFirst > 0) return flight.priceFirst;
-            if (flight.priceF && flight.priceF > 0) return flight.priceF;
-            if (flight.prices && flight.prices.first > 0) return flight.prices.first;
-            return null;
-        }
-
-        if (cabinClass === 'premium_economy') {
-            if (flight.pricePremiumEconomy && flight.pricePremiumEconomy > 0) return flight.pricePremiumEconomy;
-            if (flight.pricePE && flight.pricePE > 0) return flight.pricePE;
-            if (flight.prices && flight.prices.premiumEconomy > 0) return flight.prices.premiumEconomy;
-            return null;
-        }
-
-        return null;
+        return { name: "Economy", css: "gf-class-economy" };
     }
 
     function lookupAirportId(iata) {
@@ -321,15 +307,6 @@
                 <div class="gf-input-group" style="flex: 1.2;">
                     <span class="gf-label">Departure Date</span>
                     <input type="date" id="gf-date-input" class="gf-input" value="${todayStr}">
-                </div>
-                <div class="gf-input-group">
-                    <span class="gf-label">Class</span>
-                    <select id="gf-filter-class" class="gf-input">
-                        <option value="economy">Economy</option>
-                        <option value="premium_economy">Premium Economy</option>
-                        <option value="business">Business</option>
-                        <option value="first">First Class</option>
-                    </select>
                 </div>
                 <div class="gf-input-group">
                     <span class="gf-label">Currency Switcher Matrix</span>
@@ -567,55 +544,6 @@
         }).join('');
     }
 
-    function updateTravelGuidePanels(destCode, generatedPrices) {
-        const attractionsBox = document.getElementById('gf-attractions-box');
-        const hotelsBox = document.getElementById('gf-hotels-box');
-        const chartBox = document.getElementById('gf-price-chart');
-        const summaryText = document.getElementById('gf-trend-summary-text');
-
-        const guide = dynamicGeoDirectory[destCode] || {
-            attractions: [`${destCode} Downtown Historical Tour`, `${destCode} Regional Sightseeing`],
-            hotels: [`${destCode} Grand Airport Resort ($135/nt)`, `${destCode} Transit Business Inn ($90/nt)`]
-        };
-
-        attractionsBox.innerHTML = guide.attractions.map(item => `<div class="gf-list-item"><span>📍 ${item}</span></div>`).join('');
-        hotelsBox.innerHTML = guide.hotels.map(item => `<div class="gf-list-item"><span>🏨 ${item}</span></div>`).join('');
-
-        chartBox.innerHTML = '';
-        if (!generatedPrices || generatedPrices.length === 0) {
-            summaryText.innerText = "No price distribution available.";
-            return;
-        }
-
-        const minPrice = Math.min(...generatedPrices);
-        const maxPrice = Math.max(...generatedPrices);
-        summaryText.innerText = `Prices spread from ${formatPrice(minPrice)} to ${formatPrice(maxPrice)}.`;
-
-        const totalBarsCount = 16;
-        const bucketSize = (maxPrice - minPrice) / totalBarsCount || 1;
-        const distributionBuckets = Array(totalBarsCount).fill(0);
-
-        generatedPrices.forEach(p => {
-            let bucketIdx = Math.floor((p - minPrice) / bucketSize);
-            if (bucketIdx >= totalBarsCount) bucketIdx = totalBarsCount - 1;
-            distributionBuckets[bucketIdx]++;
-        });
-
-        const maxBucketCount = Math.max(...distributionBuckets) || 1;
-        const lowestOccupiedBucket = distributionBuckets.findIndex(count => count > 0);
-
-        distributionBuckets.forEach((count, idx) => {
-            const bar = document.createElement('div');
-            bar.className = 'gf-chart-bar';
-            const calculatedPercentage = (count / maxBucketCount) * 100;
-            bar.style.height = `${Math.max(calculatedPercentage, 6)}%`;
-            bar.title = `${count} itineraries around ${formatPrice(minPrice + (idx * bucketSize))}`;
-
-            if (idx === lowestOccupiedBucket) bar.className += ' lowest-deal';
-            chartBox.appendChild(bar);
-        });
-    }
-
     function processAndRenderFilters() {
         const resultsBox = document.getElementById('gf-results-box');
         let airlineQuery = document.getElementById('gf-filter-airline').value.toLowerCase();
@@ -631,7 +559,6 @@
         const currentBaseRate = currencyRates[activeCurrency].rate;
         const maxPrice = maxPriceInput / currentBaseRate;
         
-        const cabinClass = document.getElementById('gf-filter-class').value;
         const adultsCount = parseInt(document.getElementById('gf-filter-adults').value) || 1;
         const childrenCount = parseInt(document.getElementById('gf-filter-children').value) || 0;
         const passengerCount = adultsCount + childrenCount;
@@ -648,11 +575,6 @@
             return;
         }
 
-        let classLabelText = 'Economy';
-        if (cabinClass === 'premium_economy') classLabelText = 'Premium Economy';
-        else if (cabinClass === 'business') classLabelText = 'Business Class';
-        else if (cabinClass === 'first') classLabelText = 'First Class';
-
         let activePrices = [];
         let evaluatedItineraries = [];
 
@@ -660,20 +582,12 @@
             let interlineFeesTotal = 0;
             let criticalLayoverWindowFloor = Infinity;
             let totalCabinCost = 0;
-            let isClassAvailable = true;
 
             itinerary.legs.forEach(leg => {
                 leg.forEach(flight => {
-                    const cabinPrice = getCabinPrice(flight, cabinClass);
-                    if (cabinPrice === null) {
-                        isClassAvailable = false;
-                    } else {
-                        totalCabinCost += cabinPrice;
-                    }
+                    totalCabinCost += (flight.price || 0);
                 });
             });
-
-            if (!isClassAvailable) return;
 
             let isSplitTicket = false;
             let allFlightsInItinerary = [];
@@ -748,7 +662,7 @@
         });
 
         if (evaluatedItineraries.length === 0) {
-            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">No itineraries match your cabin class or filters.</div>`;
+            resultsBox.innerHTML = `<div style="color: #ef4444; text-align: center; margin-top: 50px;">No itineraries match your filters.</div>`;
             return;
         }
 
@@ -800,7 +714,7 @@
             card.className = 'gf-card';
             
             card.addEventListener('click', (e) => {
-                if (e.target.closest('.gf-details') || e.target.closest('.gf-book-airline-btn')) return;
+                if (e.target.closest('.gf-details')) return;
                 const detailsDrawer = card.querySelector('.gf-details');
                 if (detailsDrawer) detailsDrawer.classList.toggle('active');
             });
@@ -817,9 +731,6 @@
             let badgesHtml = '';
             if (finalCalculatedCost <= guaranteeBoundary) badgesHtml += `<span class="gf-badge-guarantee">🛡️ Price Guarantee</span>`;
             if (wrapper.isSplitTicket) badgesHtml += `<span class="gf-badge-selftransfer">⚠️ Multi-Ticket Split</span>`;
-
-            const primaryMarketingCarrier = itinerary.legs[0]?.[0]?.airlineName || "Independent Carrier";
-            const primaryAlliance = getAirlineAlliance(primaryMarketingCarrier);
 
             itinerary.legs.forEach((legFlights, index) => {
                 totalStopsCount += (legFlights.length - 1);
@@ -851,22 +762,24 @@
                     const durationMins = flight.duration || 120;
                     const flightAlliance = getAirlineAlliance(flight.airlineName);
                     
+                    const cabinInfo = detectFlightCabinInfo(flight);
                     let specsProfile = getFleetConfig(flight.airplaneModelName);
 
-                    const hasPowerOutlet = rawFeatures.includes('POWER_OUTLET') || specsProfile.power || cabinClass !== 'economy';
+                    const hasPowerOutlet = rawFeatures.includes('POWER_OUTLET') || specsProfile.power || cabinInfo.name !== "Economy";
                     let wifiStatus = "No Wi-Fi Available";
                     if (rawFeatures.includes('WIFI') || qScore >= 65 || specsProfile.wifiGen.includes('Ka-Band')) {
                         wifiStatus = `${specsProfile.wifiGen} Enabled (${specsProfile.baseSpeed})`;
                     }
 
                     let cateringMenu = "Beverage Service Only";
-                    if (cabinClass === 'business' || cabinClass === 'first') cateringMenu = "🍱 Multi-course Premium Dining";
+                    if (cabinInfo.name.includes("Business") || cabinInfo.name.includes("First")) cateringMenu = "🍱 Multi-course Premium Dining";
                     else if (durationMins > 240) cateringMenu = "🍲 Hot Meal Service";
 
-                    const flightCabinPrice = getCabinPrice(flight, cabinClass) || flight.price;
-                    const pricePerPax = flightCabinPrice + (baggageSurchargeTotal / itinerary.legs.reduce((s, l) => s + l.length, 0));
+                    const flightBasePrice = flight.price || 0;
+                    const pricePerPax = flightBasePrice + (baggageSurchargeTotal / itinerary.legs.reduce((s, l) => s + l.length, 0));
 
                     const amenitiesList = [
+                        { label: "Cabin Seat Class", val: cabinInfo.name },
                         { label: "Alliance Profile", val: flightAlliance || "Independent Carrier" },
                         { label: "Fleet Design Spec", val: `${flight.airplaneModelName || 'Commercial Jet'} (${specsProfile.config})` },
                         { label: "Configuration Pitch", val: `${specsProfile.layout} • ${specsProfile.pitch}` },
@@ -889,30 +802,16 @@
                         </div>
                     `;
 
-                    let operatedByNoticeHtml = '';
-                    const operatingCarrier = flight.operatorAirlineName || flight.airlineName;
-
-                    if (flight.airlineName !== primaryMarketingCarrier) {
-                        if (primaryAlliance && flightAlliance && primaryAlliance === flightAlliance) {
-                            operatedByNoticeHtml = ` <span class="gf-codeshare-tag">(Operated by ${flight.airlineName})</span>`;
-                        } else {
-                            operatedByNoticeHtml = ` <span class="gf-codeshare-tag" style="color: #c084fc;">(Multi-ticket segment: ${flight.airlineName})</span>`;
-                        }
-                    } else if (flight.operatorAirlineName && flight.operatorAirlineName !== flight.airlineName) {
-                        operatedByNoticeHtml = ` <span class="gf-codeshare-tag">(Operated by ${flight.operatorAirlineName})</span>`;
-                    }
-
                     legsHtml += `
                         <div class="gf-leg ${segmentIsSplit ? 'split-ticket-segment' : ''}">
                             <div class="gf-leg-title">
-                                <span>✈️ ${flight.flightCode || 'FLIGHT'} (${flight.fromAirportIata} ➔ ${flight.toAirportIata})</span>
+                                <span>✈️ ${flight.flightCode || 'FLIGHT'} (${flight.fromAirportIata} ➔ ${flight.toAirportIata}) <span class="gf-class-tag ${cabinInfo.css}">${cabinInfo.name}</span></span>
                                 <span>${formatPrice(pricePerPax * passengerCount)}</span>
                             </div>
                             <div class="gf-leg-sub">
                                 <span>
                                     <span class="gf-airline-logo-badge">${flight.airlineName.charAt(0)}</span> 
-                                    ${primaryMarketingCarrier}
-                                    ${operatedByNoticeHtml}
+                                    ${flight.airlineName}
                                     • <i style="color: #a1a1aa;">${flight.airplaneModelName || 'Commercial Jet'}</i>
                                 </span>
                                 <span class="${qTier.class}" style="font-weight: 600;">${qTier.text}</span>
@@ -1040,7 +939,6 @@
     document.getElementById('gf-filter-airline').addEventListener('input', processAndRenderFilters);
     document.getElementById('gf-filter-stops').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-filter-price').addEventListener('input', processAndRenderFilters);
-    document.getElementById('gf-filter-class').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-filter-adults').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-filter-children').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-bag-carry').addEventListener('change', processAndRenderFilters);
@@ -1048,5 +946,5 @@
     document.getElementById('gf-date-input').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-matrix-sort').addEventListener('change', processAndRenderFilters);
 
-    console.log('✈️ MyFlyClub Advanced Flight Search v15.4 loaded successfully!');
+    console.log('✈️ MyFlyClub Advanced Flight Search v15.6 loaded successfully!');
 })();
