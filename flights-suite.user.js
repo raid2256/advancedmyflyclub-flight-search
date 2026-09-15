@@ -221,31 +221,30 @@
         return fleetConfigMap["Generic Commercial"];
     }
 
-    // UPDATED: Strict Cabin Verification using explicit payload price properties (Option 2)
+    // Strict Cabin Verification using explicit payload price properties
     function getCabinPrice(flight, cabinClass) {
         if (!flight) return null;
         if (cabinClass === 'economy') return flight.price || null;
 
-        // Verify explicit class properties returned by payload
         if (cabinClass === 'business') {
             if (flight.priceBusiness && flight.priceBusiness > 0) return flight.priceBusiness;
             if (flight.priceBiz && flight.priceBiz > 0) return flight.priceBiz;
             if (flight.prices && flight.prices.business > 0) return flight.prices.business;
-            return null; // Omitted on LCCs/Economy-only configurations
+            return null;
         }
 
         if (cabinClass === 'first') {
             if (flight.priceFirst && flight.priceFirst > 0) return flight.priceFirst;
             if (flight.priceF && flight.priceF > 0) return flight.priceF;
             if (flight.prices && flight.prices.first > 0) return flight.prices.first;
-            return null; // Omitted if First Class is not configured
+            return null;
         }
 
         if (cabinClass === 'premium_economy') {
             if (flight.pricePremiumEconomy && flight.pricePremiumEconomy > 0) return flight.pricePremiumEconomy;
             if (flight.pricePE && flight.pricePE > 0) return flight.pricePE;
             if (flight.prices && flight.prices.premiumEconomy > 0) return flight.prices.premiumEconomy;
-            return null; // Omitted if Premium Economy is not configured
+            return null;
         }
 
         return null;
@@ -667,34 +666,44 @@
                 leg.forEach(flight => {
                     const cabinPrice = getCabinPrice(flight, cabinClass);
                     if (cabinPrice === null) {
-                        isClassAvailable = false; // Class omitted in server payload for this flight
+                        isClassAvailable = false;
                     } else {
                         totalCabinCost += cabinPrice;
                     }
                 });
             });
 
-            if (!isClassAvailable) return; // Skip flight if requested cabin class is not configured
+            if (!isClassAvailable) return;
+
+            let isSplitTicket = false;
+            let allFlightsInItinerary = [];
+            
+            itinerary.legs.forEach(leg => {
+                leg.forEach(flight => {
+                    allFlightsInItinerary.push(flight);
+                });
+            });
+
+            for (let i = 0; i < allFlightsInItinerary.length - 1; i++) {
+                const carrierA = allFlightsInItinerary[i].airlineName;
+                const carrierB = allFlightsInItinerary[i + 1].airlineName;
+                const allianceA = getAirlineAlliance(carrierA);
+                const allianceB = getAirlineAlliance(carrierB);
+
+                if (carrierA !== carrierB) {
+                    if (allianceA && allianceB && allianceA === allianceB) {
+                        interlineFeesTotal += 15 * passengerCount;
+                    } else {
+                        isSplitTicket = true;
+                        interlineFeesTotal += 50 * passengerCount;
+                    }
+                }
+            }
 
             itinerary.legs.forEach(leg => {
-                for (let i = 0; i < leg.length; i++) {
-                    if (i > 0) {
-                        const carrierA = leg[i - 1].airlineName;
-                        const carrierB = leg[i].airlineName;
-                        const transitGap = leg[i].departure - leg[i - 1].arrival;
-
-                        if (carrierA !== carrierB) {
-                            if (transitGap < criticalLayoverWindowFloor) criticalLayoverWindowFloor = transitGap;
-                            const allianceA = getAirlineAlliance(carrierA);
-                            const allianceB = getAirlineAlliance(carrierB);
-
-                            if (allianceA && allianceB && allianceA === allianceB) {
-                                interlineFeesTotal += 15 * passengerCount;
-                            } else {
-                                interlineFeesTotal += 50 * passengerCount;
-                            }
-                        }
-                    }
+                for (let i = 0; i < leg.length - 1; i++) {
+                    const transitGap = leg[i + 1].departure - leg[i].arrival;
+                    if (transitGap < criticalLayoverWindowFloor) criticalLayoverWindowFloor = transitGap;
                 }
             });
 
@@ -726,19 +735,6 @@
                 );
                 if (!matchesAirline) return;
             }
-
-            let isSplitTicket = false;
-            let currentAirlineGroup = null;
-            
-            itinerary.legs.forEach(leg => {
-                leg.forEach(flight => {
-                    if (!currentAirlineGroup) {
-                        currentAirlineGroup = flight.airlineName;
-                    } else if (currentAirlineGroup !== flight.airlineName) {
-                        isSplitTicket = true;
-                    }
-                });
-            });
 
             activePrices.push(adjustedCost);
             evaluatedItineraries.push({ 
@@ -822,15 +818,26 @@
             if (finalCalculatedCost <= guaranteeBoundary) badgesHtml += `<span class="gf-badge-guarantee">🛡️ Price Guarantee</span>`;
             if (wrapper.isSplitTicket) badgesHtml += `<span class="gf-badge-selftransfer">⚠️ Multi-Ticket Split</span>`;
 
-            const dominantAirline = itinerary.legs[0]?.[0]?.airlineName || "Independent Carrier";
+            const primaryMarketingCarrier = itinerary.legs[0]?.[0]?.airlineName || "Independent Carrier";
+            const primaryAlliance = getAirlineAlliance(primaryMarketingCarrier);
 
             itinerary.legs.forEach((legFlights, index) => {
                 totalStopsCount += (legFlights.length - 1);
                 legsHtml += `<div style="font-size: 11px; text-transform: uppercase; color: #3b82f6; font-weight: bold; margin-top: 6px;">Leg ${index + 1}</div>`;
                 
                 legFlights.forEach((flight, fIndex) => {
-                    let segmentIsSplit = fIndex > 0 && legFlights[fIndex - 1].airlineName !== flight.airlineName;
+                    let segmentIsSplit = false;
                     
+                    if (fIndex > 0) {
+                        const prevCarrier = legFlights[fIndex - 1].airlineName;
+                        const prevAlliance = getAirlineAlliance(prevCarrier);
+                        const currAlliance = getAirlineAlliance(flight.airlineName);
+                        
+                        if (prevCarrier !== flight.airlineName && (!prevAlliance || !currAlliance || prevAlliance !== currAlliance)) {
+                            segmentIsSplit = true;
+                        }
+                    }
+
                     if (fIndex > 0) {
                         const prevFlight = legFlights[fIndex - 1];
                         const layoverTime = flight.departure - prevFlight.arrival;
@@ -842,7 +849,7 @@
                     const qTier = getQualityTier(qScore);
                     const rawFeatures = flight.features || [];
                     const durationMins = flight.duration || 120;
-                    const allianceName = getAirlineAlliance(flight.airlineName) || "Independent Carrier";
+                    const flightAlliance = getAirlineAlliance(flight.airlineName);
                     
                     let specsProfile = getFleetConfig(flight.airplaneModelName);
 
@@ -860,7 +867,7 @@
                     const pricePerPax = flightCabinPrice + (baggageSurchargeTotal / itinerary.legs.reduce((s, l) => s + l.length, 0));
 
                     const amenitiesList = [
-                        { label: "Alliance Profile", val: allianceName },
+                        { label: "Alliance Profile", val: flightAlliance || "Independent Carrier" },
                         { label: "Fleet Design Spec", val: `${flight.airplaneModelName || 'Commercial Jet'} (${specsProfile.config})` },
                         { label: "Configuration Pitch", val: `${specsProfile.layout} • ${specsProfile.pitch}` },
                         { label: "In-Seat Outlets", val: hasPowerOutlet ? "⚡ In-seat AC & USB Power Outlets" : "No outlets available" },
@@ -882,17 +889,17 @@
                         </div>
                     `;
 
-                    const currentFlightAirline = flight.airlineName;
-                    const allianceMain = getAirlineAlliance(dominantAirline);
-                    const allianceCurrent = getAirlineAlliance(currentFlightAirline);
                     let operatedByNoticeHtml = '';
+                    const operatingCarrier = flight.operatorAirlineName || flight.airlineName;
 
-                    if (dominantAirline && currentFlightAirline && dominantAirline !== currentFlightAirline) {
-                        if (allianceMain && allianceCurrent && allianceMain !== allianceCurrent) {
-                            operatedByNoticeHtml = ` <span class="gf-codeshare-tag">(Operated by ${currentFlightAirline} - ${allianceCurrent})</span>`;
+                    if (flight.airlineName !== primaryMarketingCarrier) {
+                        if (primaryAlliance && flightAlliance && primaryAlliance === flightAlliance) {
+                            operatedByNoticeHtml = ` <span class="gf-codeshare-tag">(Operated by ${flight.airlineName})</span>`;
                         } else {
-                            operatedByNoticeHtml = ` <span class="gf-codeshare-tag">(Operated by ${currentFlightAirline})</span>`;
+                            operatedByNoticeHtml = ` <span class="gf-codeshare-tag" style="color: #c084fc;">(Multi-ticket segment: ${flight.airlineName})</span>`;
                         }
+                    } else if (flight.operatorAirlineName && flight.operatorAirlineName !== flight.airlineName) {
+                        operatedByNoticeHtml = ` <span class="gf-codeshare-tag">(Operated by ${flight.operatorAirlineName})</span>`;
                     }
 
                     legsHtml += `
@@ -904,7 +911,7 @@
                             <div class="gf-leg-sub">
                                 <span>
                                     <span class="gf-airline-logo-badge">${flight.airlineName.charAt(0)}</span> 
-                                    ${dominantAirline !== currentFlightAirline ? dominantAirline : currentFlightAirline}
+                                    ${primaryMarketingCarrier}
                                     ${operatedByNoticeHtml}
                                     • <i style="color: #a1a1aa;">${flight.airplaneModelName || 'Commercial Jet'}</i>
                                 </span>
