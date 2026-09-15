@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v14.5)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v15.0)
 // @namespace    https://github.com/raid2256
-// @version      14.5
-// @description  Google Flights style aggregator with exact airport matching, custom tabs, allied interline rules, baggage engine, seat arrangement blueprints, popout space cloning, and adaptive single-carrier direct booking portal interfaces with strict codeshare filtering and isolation rules.
+// @version      15.0
+// @description  Google Flights style aggregator integrating native MyFlyClub cached data sources, dynamic route discovery, accurate cabin price extraction, baggage engines, interline fee matrices, and direct carrier portal interfaces.
 // @match        *://*.myfly.club/*
 // @grant        none
 // ==/UserScript==
@@ -47,7 +47,7 @@
         "Generic Commercial": { layout: "Standard Arrangement", pitch: "30-32\" Standard", config: "Commercial Liner", wifiGen: "Standard Connectivity", baseSpeed: "Up to 10 Mbps" }
     };
 
-    // Full Alliance Matrix for interlining and dynamic surcharge mapping
+    // Fallback/Preset Alliance Matrix
     const allianceMap = {
         "Animals": ["Fox and Friends", "Cats", "The Panda", "Shiba", "Narwhal", "Dragon", "Goblins"],
         "Come To Brasil": ["Logic Air", "CityJet", "Global Connect", "Global Express", "Gondor Air", "Mordor Air", "Chungking Express"],
@@ -198,15 +198,26 @@
         return { text: `Terrible (${score/10}/10)`, class: 'q-terrible' };
     }
 
+    // Dynamic Alliance Resolution utilizing game globals if present
     function getAirlineAlliance(name) {
         if (!name) return null;
+        
+        // Native check if Alliance.loadedAlliancesById is populated
+        if (typeof window.Alliance !== 'undefined' && window.Alliance.loadedAlliancesById) {
+            for (const alliance of Object.values(window.Alliance.loadedAlliancesById)) {
+                if (alliance.members && alliance.members.some(m => m.name === name || m.airlineName === name)) {
+                    return alliance.name || alliance.allianceName;
+                }
+            }
+        }
+
+        // Fallback Matrix Check
         for (const [allianceName, members] of Object.entries(allianceMap)) {
             if (members.includes(name)) return allianceName;
         }
         return null;
     }
 
-    // FIXED: Better fleet config matching with fallback
     function getFleetConfig(airplaneModelName) {
         if (!airplaneModelName) return fleetConfigMap["Generic Commercial"];
         
@@ -233,18 +244,15 @@
         return fleetConfigMap["Generic Commercial"];
     }
 
-    // FIXED: Get actual cabin price from API data with realistic fallback
     function getCabinPrice(flight, cabinClass) {
         if (!flight) return 0;
         
         const basePrice = flight.price || 0;
         
-        // 1. If economy, return base price
         if (cabinClass === 'economy') {
             return basePrice;
         }
         
-        // 2. Check for class-specific fields in the flight object
         const classFields = {
             'premium_economy': ['pricePremiumEconomy', 'pricePE', 'premiumEconomyPrice', 'premiumEconomy'],
             'business': ['priceBusiness', 'priceBiz', 'businessPrice', 'business'],
@@ -258,7 +266,6 @@
             }
         }
         
-        // 3. Check prices object
         if (flight.prices && typeof flight.prices === 'object') {
             const classMap = {
                 'premium_economy': ['premiumEconomy', 'Premium Economy', 'W', 'premium_economy'],
@@ -273,13 +280,10 @@
             }
         }
         
-        // 4. Check fareClasses
         if (flight.fareClasses && flight.fareClasses[cabinClass]) {
             return flight.fareClasses[cabinClass];
         }
         
-        // 5. FALLBACK: Realistic multipliers based on actual airline pricing
-        // These are derived from real-world airline pricing patterns
         const multipliers = {
             'economy': 1.0,
             'premium_economy': 1.7,
@@ -288,23 +292,17 @@
         };
         
         let multiplier = multipliers[cabinClass] || 1.0;
-        
-        // Adjust for flight duration
         const duration = flight.duration || 120;
-        if (duration > 360) { // Long haul (6+ hours)
-            if (cabinClass === 'business' || cabinClass === 'first') {
-                multiplier *= 1.2;
-            }
-        } else if (duration < 180) { // Short haul (3- hours)
-            if (cabinClass === 'business' || cabinClass === 'first') {
-                multiplier *= 0.75;
-            }
+        if (duration > 360) {
+            if (cabinClass === 'business' || cabinClass === 'first') multiplier *= 1.2;
+        } else if (duration < 180) {
+            if (cabinClass === 'business' || cabinClass === 'first') multiplier *= 0.75;
         }
         
         return Math.round(basePrice * multiplier);
     }
 
-    // FIXED: Lookup airport ID without breaking
+    // Dynamic Airport ID resolution via native game methods & caches
     function lookupAirportId(iata) {
         const cleanIata = String(iata).trim().toUpperCase();
         
@@ -317,14 +315,17 @@
                 );
                 if (exactMatch) return exactMatch.airportId;
             } catch (err) {
-                console.warn("Cached data index parsing bypassed:", err);
+                console.warn("Native cached airport lookup warning:", err);
             }
         }
 
         const globalAirports = typeof window.airports !== 'undefined' ? window.airports : (typeof airports !== 'undefined' ? airports : null);
         if (globalAirports && globalAirports.features) {
-            const match = globalAirports.features.find(f => f.properties && String(f.properties.iata).toUpperCase() === cleanIata);
-            if (match) return match.properties.id;
+            const match = globalAirports.features.find(f => f.properties && (
+                String(f.properties.iata).toUpperCase() === cleanIata ||
+                String(f.properties.icao).toUpperCase() === cleanIata
+            ));
+            if (match) return match.properties.id || match.properties.airportId;
         }
         
         const fallbackMap = {
@@ -334,7 +335,7 @@
         };
         if (fallbackMap[cleanIata]) return fallbackMap[cleanIata];
         
-        console.warn("Could not find airport:", cleanIata);
+        console.warn("Could not resolve airport IATA/ICAO:", cleanIata);
         return null;
     }
 
@@ -799,7 +800,6 @@
         });
     }
 
-    // FIXED: Process and render with actual cabin prices
     function processAndRenderFilters() {
         const resultsBox = document.getElementById('gf-results-box');
         
@@ -833,7 +833,6 @@
             return;
         }
 
-        // FIXED: Get class label text
         let classLabelText = 'Economy';
         if (cabinClass === 'premium_economy') classLabelText = 'Premium Economy';
         else if (cabinClass === 'business') classLabelText = 'Business Class';
@@ -846,7 +845,6 @@
             let interlineFeesTotal = 0;
             let criticalLayoverWindowFloor = Infinity;
             
-            // FIXED: Calculate actual cabin cost from each flight
             let totalCabinCost = 0;
             itinerary.legs.forEach(leg => {
                 leg.forEach(flight => {
@@ -880,7 +878,6 @@
                 }
             });
 
-            // FIXED: Use totalCabinCost instead of class multiplier
             const adjustedCost = Math.round((totalCabinCost + baggageSurchargeTotal) * passengerCount + interlineFeesTotal);
             if (adjustedCost > maxPrice) return;
             
@@ -1088,10 +1085,8 @@
                     const durationMins = flight.duration || 120;
 
                     const allianceName = getAirlineAlliance(flight.airlineName) || "Independent Carrier";
-
                     let specsProfile = getFleetConfig(flight.airplaneModelName);
 
-                    // FIXED: Proper Wi-Fi detection
                     let wifiStatus = "No Wi-Fi Available";
                     if (rawFeatures.includes('WIFI') || qScore >= 65) {
                         wifiStatus = `${specsProfile.wifiGen} Enabled (${specsProfile.baseSpeed})`;
@@ -1107,7 +1102,6 @@
                         cateringMenu = "🥪 Light Snacks & Sandwiches";
                     }
 
-                    // FIXED: Get actual cabin price for display
                     const flightCabinPrice = getCabinPrice(flight, cabinClass);
                     const pricePerPax = flightCabinPrice + (baggageSurchargeTotal / itinerary.legs.reduce((s, l) => s + l.length, 0));
 
@@ -1325,7 +1319,7 @@
     document.getElementById('gf-date-input').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-matrix-sort').addEventListener('change', processAndRenderFilters);
 
-    console.log('✈️ MyFlyClub Advanced Flight Search v14.5 loaded successfully!');
-    console.log('🔧 Fixed: Actual cabin pricing from API data');
+    console.log('✈️ MyFlyClub Advanced Flight Search v15.0 Ultimate Pro Intelligence Suite loaded successfully!');
+    console.log('🔗 Integrated native game cached search data & airport features matrix.');
     console.log('📌 Click the "🌐 Open Advanced Flight Search" button in the bottom-right corner.');
 })();
