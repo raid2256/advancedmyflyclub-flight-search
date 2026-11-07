@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v16.0)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v16.1)
 // @namespace    https://github.com/raid2256
-// @version      16.0
-// @description  Google Flights style aggregator with midnight-safe layover tracking, duration-aware catering calculations, and class-isolated price trend analytics.
+// @version      16.1
+// @description  Google Flights style aggregator with codeshare operating carrier detection, midnight-safe layover tracking, duration-aware catering, and class-isolated price trend analytics.
 // @match        *://*.myfly.club/*
 // @match        *://*.airline-club.com/*
 // @grant        none
@@ -130,6 +130,7 @@
         
         .gf-badge-guarantee { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
         .gf-badge-selftransfer { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4); font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+        .gf-badge-operator { background: rgba(229, 192, 123, 0.15); color: #e5c07b; border: 1px solid rgba(229, 192, 123, 0.4); font-size: 10px; padding: 1px 5px; border-radius: 4px; font-weight: 600; margin-left: 4px; }
         
         .gf-class-tag { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; margin-left: 6px; }
         .gf-class-economy { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
@@ -190,28 +191,25 @@
         return "--:--";
     }
 
-    // Midnight-safe duration calculation
     function calculateFlightDuration(flight) {
         if (flight.duration && typeof flight.duration === 'number' && flight.duration > 0) {
             return flight.duration;
         }
         if (typeof flight.departure === 'number' && typeof flight.arrival === 'number') {
             let diff = flight.arrival - flight.departure;
-            if (diff <= 0) diff += 1440; // Crossed midnight boundary
+            if (diff <= 0) diff += 1440;
             return diff;
         }
-        return 120; // Default fallback
+        return 120;
     }
 
-    // Midnight-safe layover gap calculation
     function calculateLayoverGap(prevArrival, nextDeparture) {
         if (typeof prevArrival !== 'number' || typeof nextDeparture !== 'number') return 0;
         let gap = nextDeparture - prevArrival;
-        if (gap < 0) gap += 1440; // Overnight rollover
+        if (gap < 0) gap += 1440;
         return gap;
     }
 
-    // Smart duration & cabin-aware catering calculation
     function determineCateringMenu(cabinKey, durationMins, rawFeatures = []) {
         const featStr = (Array.isArray(rawFeatures) ? rawFeatures.join(' ') : String(rawFeatures || '')).toLowerCase();
         
@@ -226,7 +224,6 @@
             return "🍷 Multi-Course Gourmet Dining, Snacks & On-Demand Bar";
         }
 
-        // Economy
         if (durationMins <= 75) return "🥤 Express Beverage & Light Snack Pack";
         if (durationMins <= 180) return "🥪 Complimentary Sandwich / Snack Box & Drinks";
         if (durationMins <= 480) return "🍲 Full Hot Meal Service & Beverage Bar";
@@ -234,9 +231,27 @@
     }
 
     function calculateEmissions(durationMins, passengerCount) {
-        // Non-linear aviation model: 120kg fixed climb/takeoff + 3.2kg/min cruise per passenger
         const co2PerPax = 120 + (durationMins * 3.2);
         return Math.round(co2PerPax * passengerCount);
+    }
+
+    function detectOperatorName(flight) {
+        if (!flight) return null;
+        const candidates = [
+            flight.operatorName,
+            flight.operatedBy,
+            flight.operator,
+            flight.operatingAirline,
+            flight.operatingAirlineName,
+            flight.realAirlineName,
+            flight.actualCarrierName
+        ];
+        for (const candidate of candidates) {
+            if (candidate && typeof candidate === 'string' && candidate.trim() !== '') {
+                return candidate.trim();
+            }
+        }
+        return null;
     }
 
     function getQualityTier(score) {
@@ -757,7 +772,6 @@
         let evaluatedItineraries = [];
 
         compiledItineraries.forEach(itinerary => {
-            // Filter by Cabin Class prior to running calculations
             if (selectedCabinClass !== 'all') {
                 const matchesCabin = itinerary.legs.every(leg => 
                     leg.every(flight => {
@@ -803,7 +817,6 @@
                 }
             }
 
-            // Midnight-safe layover checks
             itinerary.legs.forEach(leg => {
                 for (let i = 0; i < leg.length - 1; i++) {
                     const transitGap = calculateLayoverGap(leg[i].arrival, leg[i + 1].departure);
@@ -947,13 +960,17 @@
                     const arrTimeFormatted = formatTime(flight.arrival);
                     const durFormatted = formatDuration(durationMins);
 
+                    // Codeshare Operator Detection
+                    const operatorName = detectOperatorName(flight);
+                    const isCodeshare = operatorName && operatorName.toLowerCase() !== (flight.airlineName || '').toLowerCase();
+                    const operatorBadgeHtml = isCodeshare ? `<span class="gf-badge-operator">Operated by ${operatorName}</span>` : '';
+
                     const hasPowerOutlet = rawFeatures.includes('POWER_OUTLET') || specsProfile.power || cabinInfo.key !== "economy";
                     let wifiStatus = "No Wi-Fi Available";
                     if (rawFeatures.includes('WIFI') || qScore >= 65 || specsProfile.wifiGen.includes('Ka-Band')) {
                         wifiStatus = `${specsProfile.wifiGen} Enabled (${specsProfile.baseSpeed})`;
                     }
 
-                    // Dynamic, duration-aware catering menu
                     const cateringMenu = determineCateringMenu(cabinInfo.key, durationMins, rawFeatures);
 
                     const flightBasePrice = flight.price || 0;
@@ -965,6 +982,7 @@
                     const amenitiesList = [
                         { label: "Cabin Seat Class", val: cabinInfo.name },
                         { label: "Flight Timings", val: `${depTimeFormatted} ➔ ${arrTimeFormatted} (${durFormatted})` },
+                        { label: "Operating Carrier", val: isCodeshare ? `${flight.airlineName} (Operated by ${operatorName})` : (flight.airlineName || 'Carrier') },
                         { label: "Alliance Profile", val: flightAlliance || "Independent Carrier" },
                         { label: "Fleet Design Spec", val: `${flight.airplaneModelName || 'Commercial Jet'} (${specsProfile.config})` },
                         { label: "Configuration Pitch", val: `${specsProfile.layout} • ${specsProfile.pitch}` },
@@ -999,7 +1017,7 @@
                             <div class="gf-leg-sub">
                                 <span>
                                     <span class="gf-airline-logo-badge">${(flight.airlineName || 'A').charAt(0)}</span> 
-                                    ${flight.airlineName || 'Carrier'}
+                                    ${flight.airlineName || 'Carrier'} ${operatorBadgeHtml}
                                     • <i style="color: #a1a1aa;">${flight.airplaneModelName || 'Commercial Jet'}</i>
                                 </span>
                                 <span class="${qTier.class}" style="font-weight: 600;">${qTier.text}</span>
@@ -1158,5 +1176,5 @@
     document.getElementById('gf-date-input').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-matrix-sort').addEventListener('change', processAndRenderFilters);
 
-    console.log('✈️ MyFlyClub Advanced Flight Search v16.0 loaded & active!');
+    console.log('✈️ MyFlyClub Advanced Flight Search v16.1 loaded & active!');
 })();
