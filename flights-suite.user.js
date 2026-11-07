@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v16.1)
+// @name         MyFlyClub Advanced Flight Search (Ultimate Pro Intelligence Suite v16.3)
 // @namespace    https://github.com/raid2256
-// @version      16.1
-// @description  Google Flights style aggregator with codeshare operating carrier detection, midnight-safe layover tracking, duration-aware catering, and class-isolated price trend analytics.
+// @version      16.3
+// @description  Google Flights style aggregator with direct text-matched codeshare operator detection, midnight-safe layover tracking, duration-aware catering, and class-isolated price trend analytics.
 // @match        *://*.myfly.club/*
 // @match        *://*.airline-club.com/*
 // @grant        none
@@ -235,22 +235,40 @@
         return Math.round(co2PerPax * passengerCount);
     }
 
-    function detectOperatorName(flight) {
+    // Direct text search matching logic for "Operated by <Airline>"
+    function detectOperatedBy(flight) {
         if (!flight) return null;
-        const candidates = [
-            flight.operatorName,
+
+        const directProps = [
             flight.operatedBy,
             flight.operator,
+            flight.operatorName,
             flight.operatingAirline,
             flight.operatingAirlineName,
-            flight.realAirlineName,
-            flight.actualCarrierName
+            flight.operatedByText,
+            flight.operatorText
         ];
-        for (const candidate of candidates) {
-            if (candidate && typeof candidate === 'string' && candidate.trim() !== '') {
-                return candidate.trim();
+        for (const p of directProps) {
+            if (p && typeof p === 'string' && p.trim()) {
+                return p.trim().replace(/^operated\s+by\s+/i, '');
             }
         }
+
+        try {
+            const rawJson = JSON.stringify(flight);
+            const match = rawJson.match(/operated\s+by\s+([^"\\{},:]+)/i);
+            if (match && match[1]) {
+                return match[1].trim();
+            }
+        } catch (e) {}
+
+        for (const key in flight) {
+            if (typeof flight[key] === 'string') {
+                const m = flight[key].match(/operated\s+by\s+([^"\\{},:]+)/i);
+                if (m && m[1]) return m[1].trim();
+            }
+        }
+
         return null;
     }
 
@@ -960,8 +978,7 @@
                     const arrTimeFormatted = formatTime(flight.arrival);
                     const durFormatted = formatDuration(durationMins);
 
-                    // Codeshare Operator Detection
-                    const operatorName = detectOperatorName(flight);
+                    const operatorName = detectOperatedBy(flight);
                     const isCodeshare = operatorName && operatorName.toLowerCase() !== (flight.airlineName || '').toLowerCase();
                     const operatorBadgeHtml = isCodeshare ? `<span class="gf-badge-operator">Operated by ${operatorName}</span>` : '';
 
@@ -1176,5 +1193,5 @@
     document.getElementById('gf-date-input').addEventListener('change', processAndRenderFilters);
     document.getElementById('gf-matrix-sort').addEventListener('change', processAndRenderFilters);
 
-    console.log('✈️ MyFlyClub Advanced Flight Search v16.1 loaded & active!');
+    console.log('✈️ MyFlyClub Advanced Flight Search v16.3 loaded & active!');
 })();
